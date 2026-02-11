@@ -1,6 +1,5 @@
 <template>
   <div class="condition-gateway-node" :style="nodeStyle" :title="label">
-    <span class="gateway-icon">◇</span>
     
     <!-- 上方连接点（入边，接收源节点的连线） -->
     <Handle
@@ -65,9 +64,8 @@ const nodeColor = computed(() => props.color || '#8b5cf6')
 const nodeStyle = computed(() => ({
   background: nodeColor.value,
   color: 'white',
-  border: '1.5px solid rgba(255,255,255,0.6)',
-  width: '28px',
-  height: '28px',
+  width: '20px',
+  height: '20px',
   borderRadius: '50%',
   textAlign: 'center' as const,
   position: 'relative' as const,
@@ -76,7 +74,6 @@ const nodeStyle = computed(() => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
   cursor: 'pointer',
   transition: 'all 0.2s ease'
 }))
@@ -94,48 +91,7 @@ const isBottomConnected = computed(() => {
 .condition-gateway-node {
   position: relative;
   display: flex;
-  alignItems: center;
-  justifyContent: center;
-}
-
-.condition-gateway-node:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
-}
-
-.gateway-icon {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.95);
-  line-height: 1;
-}
-
-.node-handle {
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  width: 8px !important;
-  height: 8px !important;
-  background: #8b5cf6 !important;
-  border: 2px solid white !important;
-}
-
-.node-handle.top {
-  top: -5px !important;
-}
-
-.node-handle.bottom {
-  bottom: -5px !important;
-}
-
-.node-handle.connected {
-  opacity: 1;
-}
-
-.condition-gateway-node:hover .node-handle {
-  opacity: 0.5;
-}
-
-.node-handle:hover {
-  opacity: 1 !important;
-  transform: scale(1.3);
+  align-items: center;
+  justify-content: center;
 }
 </style>

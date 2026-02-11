@@ -63,7 +63,7 @@
           @connect="onConnect"
           @edgeClick="onEdgeClick"
           @edgeDoubleClick="onEdgeDoubleClick"
-          @contextMenu="onEdgeContextMenu"
+          @edgeContextMenu="onEdgeContextMenu"
         >
           <template #node-custom="props">
             <CustomNode
@@ -77,9 +77,6 @@
               :id="props.id"
               :label="props.data?.label"
               :color="props.data?.color"
-              :conditions="props.data?.gatewayConditions"
-              :branches="props.data?.branches"
-              @addBranch="onAddBranchFromGateway"
             />
           </template>
           <template #edge-label="props">
@@ -169,7 +166,7 @@
       </aside>
 
       <!-- 连线属性面板 -->
-      <aside class="sidebar-right" v-if="selectedEdge && !selectedNode && !editingGatewayConditions">
+      <aside class="sidebar-right" v-if="selectedEdge && !selectedNode">
         <h3 class="sidebar-title">连线属性</h3>
         <div class="property-form">
           <!-- 源节点（不可修改） -->
@@ -282,115 +279,13 @@
           </div>
         </div>
       </aside>
-
-      <!-- 条件网关属性面板 -->
-      <aside class="sidebar-right" v-if="selectedGatewayNode && editingGatewayConditions">
-        <h3 class="sidebar-title">条件网关属性</h3>
-        <div class="property-form">
-          <!-- 网关节点名称 -->
-          <div class="form-group">
-            <label>节点名称 <span class="required">*</span></label>
-            <input 
-              v-model="selectedGatewayNode.label" 
-              class="form-input"
-              @input="handleGatewayLabelInput"
-            />
-          </div>
-
-          <!-- 主条件配置 -->
-          <div class="form-group">
-            <label>主条件配置 <span class="help-text">(影响所有分支)</span></label>
-            
-            <!-- Status 条件 -->
-            <div class="condition-section">
-              <div class="condition-title">Status 条件</div>
-              <div class="form-group">
-                <label>状态值</label>
-                <input 
-                  v-model.number="selectedGatewayNode.gatewayConditions.statusValue"
-                  class="form-input"
-                  placeholder="输入数字或留空"
-                  @input="handleGatewayConditionInput"
-                />
-              </div>
-            </div>
-            
-            <!-- 参数条件 -->
-            <div class="condition-section">
-              <div class="condition-title">参数条件</div>
-              <div class="form-group">
-                <label>参数名</label>
-                <input 
-                  v-model="selectedGatewayNode.gatewayConditions.paramName"
-                  class="form-input"
-                  placeholder="例如: result"
-                  @input="handleGatewayConditionInput"
-                />
-              </div>
-              <div class="form-group">
-                <label>关系</label>
-                <select v-model="selectedGatewayNode.gatewayConditions.paramOperator" class="form-input" @change="handleGatewayConditionInput">
-                  <option value="eq">等于</option>
-                  <option value="ne">不等于</option>
-                  <option value="contains">包含</option>
-                  <option value="regex">正则匹配</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>参数值</label>
-                <input 
-                  v-model="selectedGatewayNode.gatewayConditions.paramValue"
-                  class="form-input"
-                  placeholder="例如: success"
-                  @input="handleGatewayConditionInput"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- 分支管理 -->
-          <div class="form-group">
-            <label>分支列表 <span class="help-text">({{ gatewayBranches.length }}/5)</span></label>
-            <div class="branch-list">
-              <div 
-                v-for="(branch, index) in gatewayBranches" 
-                :key="branch.id"
-                class="branch-item"
-                @click="selectGatewayBranch(branch)"
-              >
-                <span class="branch-label">分支 {{ index + 1 }}</span>
-                <span class="branch-target">{{ branch.targetNodeId || '未连接' }}</span>
-                <button 
-                  class="branch-delete-btn"
-                  @click.stop="deleteGatewayBranch(index)"
-                  :disabled="gatewayBranches.length <= 1"
-                >
-                  删除
-                </button>
-              </div>
-            </div>
-            <button 
-              class="add-branch-btn"
-              @click="addGatewayBranch"
-              :disabled="gatewayBranches.length >= 5"
-            >
-              添加分支
-            </button>
-          </div>
-
-          <!-- 返回按钮 -->
-          <div class="form-group">
-            <button class="back-to-edge-btn" @click="backToEdgeEditing">
-              返回连线编辑
-            </button>
-          </div>
-        </div>
-      </aside>
+      
       <!-- 右键菜单 -->
       <div 
         v-if="contextMenu.visible" 
         class="context-menu"
-        :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+        v-click-outside="closeContextMenu"
       >
         <div 
           class="context-menu-item" 
@@ -398,14 +293,6 @@
           data-action="convertToGateway"
         >
           添加条件网关
-        </div>
-        <div 
-          v-if="contextMenu.type === 'gateway'"
-          class="context-menu-item"
-          @click="executeContextMenuAction"
-          data-action="addBranch"
-        >
-          添加分支
         </div>
         <div class="context-menu-divider"></div>
         <div 
@@ -481,9 +368,6 @@ const hasStartedTypingCollection = ref(false)
 const isEditingProperties = ref(false)
 const editingNodeId = ref<string | null>(null)
 
-// 条件网关状态
-const editingGatewayConditions = ref(false)
-const selectedGatewayNodeId = ref<string | null>(null)
 const contextMenu = ref({
   visible: false,
   x: 0,
@@ -491,16 +375,6 @@ const contextMenu = ref({
   type: 'edge' as 'edge' | 'gateway',
   edgeId: null as string | null
 })
-const gatewayBranches = ref<Array<{
-  id: string
-  targetNodeId: string
-  conditions: {
-    statusValue?: string
-    paramName?: string
-    paramOperator?: string
-    paramValue?: string
-  }
-}>>([])
 
 const isLabelValid = computed(() => {
   return validateField(selectedNode.value?.label)
@@ -581,22 +455,6 @@ const isEdgePartOfGateway = computed(() => {
   if (!selectedEdgeId.value) return false
   const edge = edges.value.find(e => e.id === selectedEdgeId.value)
   return edge?.isGatewayEdge === true
-})
-
-const selectedGatewayNode = computed(() => {
-  if (!selectedGatewayNodeId.value) return null
-  const node = findNode(selectedGatewayNodeId.value)
-  if (!node) return null
-  return {
-    id: node.id,
-    label: node.data?.label || '',
-    gatewayConditions: node.data?.gatewayConditions || {
-      statusValue: undefined,
-      paramName: undefined,
-      paramOperator: 'eq',
-      paramValue: undefined
-    }
-  }
 })
 
 const selectedNode = computed(() => {
@@ -745,6 +603,23 @@ onMounted(() => {
   // 新建时不初始化任何节点，保持空白画布
 })
 
+const handleGlobalClick = (event: MouseEvent) => {
+  if (contextMenu.value.visible) {
+    const target = event.target as HTMLElement
+    if (!target.closest('.context-menu')) {
+      closeContextMenu()
+    }
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleGlobalClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick)
+})
+
 const onDragStart = (event: DragEvent, node: { type: string; label: string; icon: string; color: string }) => {
   if (event.dataTransfer) {
     event.dataTransfer.setData('application/vueflow', JSON.stringify(node))
@@ -811,8 +686,8 @@ const onNodeClick = (event: { node: { id: string } }) => {
     return
   }
   
-  // 如果正在编辑网关且未完成验证，阻止切换到节点
-  if (editingGatewayConditions.value && !areAllRequiredFieldsValid.value) {
+  // 如果正在编辑连线且未完成验证，阻止切换到节点
+  if (isEditingEdge.value && !isEdgeValid.value) {
     return
   }
   
@@ -820,9 +695,6 @@ const onNodeClick = (event: { node: { id: string } }) => {
   isEditingEdge.value = false
   editingEdgeId.value = null
   selectedEdgeId.value = null
-  editingGatewayConditions.value = false
-  selectedGatewayNodeId.value = null
-  gatewayBranches.value = []
   
   if (isEditingProperties.value && editingNodeId.value !== event.node.id) {
     if (!areAllRequiredFieldsValid.value) {
@@ -872,14 +744,123 @@ const onPaneClick = () => {
     return
   }
   
-  // 如果正在编辑网关条件，允许关闭
-  if (editingGatewayConditions.value) {
-    clearAllEditingStates()
-    return
-  }
-  
   // 使用统一方法清除所有编辑状态和遮罩
   clearAllEditingStates()
+}
+
+const clearAllEditingStates = () => {
+  isEditingProperties.value = false
+  isEditingEdge.value = false
+  selectedNodeId.value = null
+  selectedEdgeId.value = null
+  editingNodeId.value = null
+  editingEdgeId.value = null
+  showPropertiesPanel.value = false
+  showMask.value = false
+}
+
+const closeContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+const executeContextMenuAction = (event: MouseEvent) => {
+  // 遮罩状态下禁用所有操作
+  if (showMask.value) return
+  
+  const action = (event.target as HTMLElement).getAttribute('data-action')
+  
+  if (action === 'convertToGateway' && contextMenu.value.edgeId) {
+    selectedEdgeId.value = contextMenu.value.edgeId
+    convertToConditionGateway()
+  }
+  
+  closeContextMenu()
+}
+
+const convertToConditionGateway = () => {
+  if (!selectedEdgeId.value) return
+  
+  const edgeIndex = edges.value.findIndex(e => e.id === selectedEdgeId.value)
+  if (edgeIndex === -1) return
+  
+  const edge = edges.value[edgeIndex]
+  if (!edge) return
+  
+  const sourceNode = findNode(edge.source)
+  const targetNode = findNode(edge.target)
+  if (!sourceNode || !targetNode) return
+  
+  const gatewayNodeId = `gateway-${edge.id}`
+  const gatewayX = (sourceNode.position.x + targetNode.position.x) / 2
+  const gatewayY = (sourceNode.position.y + targetNode.position.y) / 2
+  
+  const gatewayNode: Node = {
+    id: gatewayNodeId,
+    type: 'condition-gateway',
+    position: { x: gatewayX, y: gatewayY },
+    style: {
+      background: '#8b5cf6',
+      color: 'white',
+      border: 'none',
+      padding: '0',
+      borderRadius: '50%',
+      width: '20px',
+      height: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    data: {
+      nodeType: 'condition-gateway',
+      label: '条件网关',
+      color: '#8b5cf6',
+      isConditionGateway: true,
+      parentEdgeId: edge.id
+    }
+  }
+  
+  edges.value.splice(edgeIndex, 1)
+  
+  addNodes([gatewayNode])
+
+  const inboundEdge: CustomEdge = {
+    id: `${edge.id}-in`,
+    source: edge.source,
+    sourceHandle: 'bottom',
+    target: gatewayNodeId,
+    targetHandle: 'top',
+    label: '[P10]',
+    data: { priority: 10, label: '[P10]' },
+    priority: 10,
+    isGatewayEdge: true,
+    gatewayNodeId
+  }
+
+  const outboundEdge: CustomEdge = {
+    id: edge.id,
+    source: gatewayNodeId,
+    sourceHandle: 'bottom',
+    target: edge.target,
+    label: '[P10]',
+    data: { priority: 10, label: '[P10]' },
+    priority: edge.priority || 10,
+    isGatewayEdge: true,
+    gatewayNodeId,
+    statusValue: edge.statusValue,
+    paramName: edge.paramName,
+    paramOperator: edge.paramOperator || 'eq',
+    paramValue: edge.paramValue
+  }
+
+  edges.value = [...edges.value, inboundEdge, outboundEdge]
+
+  const outboundEdgeInArray = edges.value.find(e => e.id === outboundEdge.id)
+  if (outboundEdgeInArray) {
+    updateEdgeLabel(outboundEdgeInArray)
+  }
+
+  updateNodeInternals([gatewayNodeId])
+  nodes.value = [...nodes.value]
 }
 
 const updateNodeLabel = () => {
@@ -933,283 +914,6 @@ const handlePriorityInput = () => {
 
 // ==================== 条件网关相关方法 ====================
 
-const convertToConditionGateway = () => {
-  if (!selectedEdgeId.value) return
-  
-  const edgeIndex = edges.value.findIndex(e => e.id === selectedEdgeId.value)
-  if (edgeIndex === -1) return
-  
-  const edge = edges.value[edgeIndex]
-  if (!edge) return
-  
-  const sourceNode = findNode(edge.source)
-  const targetNode = findNode(edge.target)
-  if (!sourceNode || !targetNode) return
-  
-  const gatewayNodeId = `gateway-${edge.id}`
-  const gatewayX = (sourceNode.position.x + targetNode.position.x) / 2
-  const gatewayY = (sourceNode.position.y + targetNode.position.y) / 2
-  
-  const gatewayNode: Node = {
-    id: gatewayNodeId,
-    type: 'condition-gateway',
-    position: { x: gatewayX, y: gatewayY },
-    style: {
-      background: '#8b5cf6',
-      color: 'white',
-      border: 'none',
-      padding: '0',
-      borderRadius: '50%',
-      width: '20px',
-      height: '20px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
-    data: {
-      nodeType: 'condition-gateway',
-      label: '条件网关',
-      color: '#8b5cf6',
-      isConditionGateway: true,
-      parentEdgeId: edge.id
-    }
-  }
-  
-  edges.value.splice(edgeIndex, 1)
-  
-  addNodes([gatewayNode])
-
-  const inboundEdge: CustomEdge = {
-    id: `${edge.id}-in`,
-    source: edge.source,
-    target: gatewayNodeId,
-    targetHandle: 'top',
-    label: '[P10]',
-    data: { priority: 10, label: '[P10]' },
-    priority: 10,
-    isGatewayEdge: true,
-    gatewayNodeId
-  }
-
-  const outboundEdge: CustomEdge = {
-    id: edge.id,
-    source: gatewayNodeId,
-    sourceHandle: 'bottom',
-    target: edge.target,
-    label: '[P10]',
-    data: { priority: 10, label: '[P10]' },
-    priority: edge.priority || 10,
-    isGatewayEdge: true,
-    gatewayNodeId,
-    statusValue: edge.statusValue,
-    paramName: edge.paramName,
-    paramOperator: edge.paramOperator || 'eq',
-    paramValue: edge.paramValue
-  }
-
-  edges.value = [...edges.value, inboundEdge, outboundEdge]
-
-  const outboundEdgeInArray = edges.value.find(e => e.id === outboundEdge.id)
-  if (outboundEdgeInArray) {
-    updateEdgeLabel(outboundEdgeInArray)
-  }
-
-  updateNodeInternals([gatewayNodeId])
-  nodes.value = [...nodes.value]
-  
-  const initialBranches: ConditionBranch[] = [{
-    id: `branch-${Date.now()}`,
-    targetNodeId: edge.target,
-    conditions: {
-      statusValue: edge.statusValue,
-      paramName: edge.paramName,
-      paramOperator: (edge.paramOperator || 'eq') as ConditionOperator,
-      paramValue: edge.paramValue
-    },
-    priority: edge.priority || 10
-  }]
-  
-  selectedGatewayNodeId.value = gatewayNodeId
-  gatewayBranches.value = initialBranches
-  editingGatewayConditions.value = true
-  selectedEdgeId.value = null
-  showMask.value = true
-}
-
-const addGatewayBranch = () => {
-  if (gatewayBranches.value.length >= 5) return
-  
-  const newBranch: ConditionBranch = {
-    id: `branch-${Date.now()}`,
-    targetNodeId: '',
-    conditions: {
-      statusValue: undefined,
-      paramName: undefined,
-      paramOperator: 'eq',
-      paramValue: undefined
-    }
-  }
-  
-  gatewayBranches.value.push(newBranch)
-  
-  // 同时更新节点数据和边数据
-  if (selectedGatewayNodeId.value) {
-    const node = findNode(selectedGatewayNodeId.value)
-    if (node) {
-      node.data.branches = [...gatewayBranches.value]
-    }
-  }
-  
-  updateGatewayBranches()
-}
-
-const deleteGatewayBranch = (index: number) => {
-  if (gatewayBranches.value.length <= 1) return
-  
-  gatewayBranches.value.splice(index, 1)
-  updateGatewayBranches()
-}
-
-const selectGatewayBranch = (branch: { 
-  id: string
-  targetNodeId: string
-  conditions: {
-    statusValue?: string
-    paramName?: string
-    paramOperator?: string
-    paramValue?: string
-  }
-}) => {
-  console.log('Selected branch:', branch)
-}
-
-const updateGatewayBranches = () => {
-  if (!selectedGatewayNodeId.value) return
-  
-  const gatewayEdge = edges.value.find(
-    e => e.gatewayNodeId === selectedGatewayNodeId.value
-  )
-  
-  if (gatewayEdge) {
-    gatewayEdge.branches = gatewayBranches.value
-  }
-}
-
-const handleGatewayLabelInput = () => {
-  if (!selectedGatewayNodeId.value) return
-  
-  const node = findNode(selectedGatewayNodeId.value)
-  if (node) {
-    node.data.label = selectedGatewayNode.value?.label || '条件网关'
-  }
-}
-
-const handleGatewayConditionInput = () => {
-  if (!selectedGatewayNodeId.value) return
-  
-  const node = findNode(selectedGatewayNodeId.value)
-  if (node) {
-    node.data.gatewayConditions = {
-      statusValue: selectedGatewayNode.value?.gatewayConditions.statusValue,
-      paramName: selectedGatewayNode.value?.gatewayConditions.paramName,
-      paramOperator: selectedGatewayNode.value?.gatewayConditions.paramOperator || 'eq',
-      paramValue: selectedGatewayNode.value?.gatewayConditions.paramValue
-    }
-  }
-}
-
-// 统一清除所有编辑状态和遮罩
-const clearAllEditingStates = () => {
-  isEditingProperties.value = false
-  isEditingEdge.value = false
-  editingGatewayConditions.value = false
-  selectedNodeId.value = null
-  selectedEdgeId.value = null
-  selectedGatewayNodeId.value = null
-  editingNodeId.value = null
-  editingEdgeId.value = null
-  showPropertiesPanel.value = false
-  showMask.value = false
-}
-
-const backToEdgeEditing = () => {
-  editingGatewayConditions.value = false
-  selectedGatewayNodeId.value = null
-  gatewayBranches.value = []
-  // 切换回边编辑模式时保持遮罩
-  isEditingEdge.value = true
-  showMask.value = false
-}
-
-// 从网关节点添加分支
-const onAddBranchFromGateway = (gatewayId: string) => {
-  selectedGatewayNodeId.value = gatewayId
-  
-  // 找到对应的主边
-  const parentEdge = edges.value.find(e => e.gatewayNodeId === gatewayId)
-  if (parentEdge) {
-    gatewayBranches.value = parentEdge.branches || []
-  }
-  
-  // 直接添加新分支
-  addGatewayBranch()
-}
-
-// 右键菜单相关
-const onEdgeContextMenu = (event: { originalEvent: MouseEvent; edge: { id: string } }) => {
-  // 遮罩状态下禁用所有操作
-  if (showMask.value) return
-  
-  event.originalEvent.preventDefault()
-  
-  contextMenu.value = {
-    visible: true,
-    x: event.originalEvent.clientX,
-    y: event.originalEvent.clientY,
-    type: 'edge',
-    edgeId: event.edge.id
-  }
-}
-
-const closeContextMenu = () => {
-  contextMenu.value.visible = false
-}
-
-const executeContextMenuAction = (event: MouseEvent) => {
-  // 遮罩状态下禁用所有操作
-  if (showMask.value) return
-  
-  const action = (event.target as HTMLElement).getAttribute('data-action')
-  
-  if (action === 'convertToGateway' && contextMenu.value.edgeId) {
-    selectedEdgeId.value = contextMenu.value.edgeId
-    convertToConditionGateway()
-  } else if (action === 'addBranch' && selectedGatewayNodeId.value) {
-    addGatewayBranch()
-  }
-  
-  closeContextMenu()
-}
-
-// 点击画布关闭右键菜单
-const handleGlobalClick = (event: MouseEvent) => {
-  if (contextMenu.value.visible) {
-    const target = event.target as HTMLElement
-    if (!target.closest('.context-menu')) {
-      closeContextMenu()
-    }
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', handleGlobalClick)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleGlobalClick)
-})
-
-// 更新连线标签显示
 const updateEdgeLabel = (edge: CustomEdge) => {
   const priority = edge.priority ?? 10
   const parts: string[] = [`P${priority}`]
@@ -1453,6 +1157,21 @@ const onEdgeDoubleClick = (event: { edge: { id: string } }) => {
       edges.value = [...allEdges]
     }
    }
+}
+
+const onEdgeContextMenu = (event: any) => {
+  // 遮罩状态下禁用所有操作
+  if (showMask.value) return
+
+  event.originalEvent?.preventDefault()
+
+  contextMenu.value = {
+    visible: true,
+    x: event.originalEvent?.clientX || 0,
+    y: event.originalEvent?.clientY || 0,
+    type: 'edge',
+    edgeId: event.edge?.id || null
+  }
 }
 
 const goBack = () => {
