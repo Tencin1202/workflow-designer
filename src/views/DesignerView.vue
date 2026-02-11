@@ -210,14 +210,14 @@
             <span class="help-text">数字越小优先级越高（0-10）</span>
           </div>
 
-          <!-- 转换为条件网关按钮 -->
+          <!-- 添加条件网关按钮 -->
           <div class="form-group">
             <button 
               class="convert-gateway-btn"
               @click="convertToConditionGateway"
               :disabled="isEdgePartOfGateway"
             >
-              转换为条件网关
+              添加条件网关
             </button>
             <span class="help-text" v-if="isEdgePartOfGateway">
               此连线已属于条件网关
@@ -397,7 +397,7 @@
           @click="executeContextMenuAction"
           data-action="convertToGateway"
         >
-          转换为条件网关
+          添加条件网关
         </div>
         <div 
           v-if="contextMenu.type === 'gateway'"
@@ -946,12 +946,10 @@ const convertToConditionGateway = () => {
   const targetNode = findNode(edge.target)
   if (!sourceNode || !targetNode) return
   
-  // 计算网关位置：连线中点
   const gatewayNodeId = `gateway-${edge.id}`
   const gatewayX = (sourceNode.position.x + targetNode.position.x) / 2
   const gatewayY = (sourceNode.position.y + targetNode.position.y) / 2
   
-  // 创建网关节点
   const gatewayNode: Node = {
     id: gatewayNodeId,
     type: 'condition-gateway',
@@ -977,51 +975,48 @@ const convertToConditionGateway = () => {
     }
   }
   
-  // 创建入边：源节点 → 网关（无条件的默认路径）
+  edges.value.splice(edgeIndex, 1)
+  
+  addNodes([gatewayNode])
+
   const inboundEdge: CustomEdge = {
     id: `${edge.id}-in`,
     source: edge.source,
     target: gatewayNodeId,
+    targetHandle: 'top',
     label: '[P10]',
     data: { priority: 10, label: '[P10]' },
     priority: 10,
     isGatewayEdge: true,
     gatewayNodeId
   }
-  
-  // 保留原边，改为：网关 → 目标节点（保留所有原条件和属性）
+
   const outboundEdge: CustomEdge = {
-    id: edge.id,  // 保持原边ID
+    id: edge.id,
     source: gatewayNodeId,
+    sourceHandle: 'bottom',
     target: edge.target,
-    label: edge.label || '[默认]',
-    data: { 
-      priority: edge.priority || 10,
-      label: edge.label || '[默认]',
-      isDefaultBranch: true
-    },
+    label: '[P10]',
+    data: { priority: 10, label: '[P10]' },
     priority: edge.priority || 10,
     isGatewayEdge: true,
     gatewayNodeId,
-    // 保留原边的所有条件
     statusValue: edge.statusValue,
     paramName: edge.paramName,
-    paramOperator: edge.paramOperator,
+    paramOperator: edge.paramOperator || 'eq',
     paramValue: edge.paramValue
   }
-  
-  // 更新原边为出边
-  edges.value[edgeIndex] = outboundEdge
-  
-  // 添加网关节点和入边
-  addNodes([gatewayNode])
-  addEdges([inboundEdge])
-  
-  // 同步更新
+
+  edges.value = [...edges.value, inboundEdge, outboundEdge]
+
+  const outboundEdgeInArray = edges.value.find(e => e.id === outboundEdge.id)
+  if (outboundEdgeInArray) {
+    updateEdgeLabel(outboundEdgeInArray)
+  }
+
+  updateNodeInternals([gatewayNodeId])
   nodes.value = [...nodes.value]
-  edges.value = [...edges.value]
   
-  // 初始化分支列表（原边作为第一个默认分支）
   const initialBranches: ConditionBranch[] = [{
     id: `branch-${Date.now()}`,
     targetNodeId: edge.target,
@@ -1034,7 +1029,6 @@ const convertToConditionGateway = () => {
     priority: edge.priority || 10
   }]
   
-  // 切换到网关编辑模式
   selectedGatewayNodeId.value = gatewayNodeId
   gatewayBranches.value = initialBranches
   editingGatewayConditions.value = true
