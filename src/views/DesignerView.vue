@@ -209,15 +209,18 @@
 
           <!-- 添加条件网关按钮 -->
           <div class="form-group">
-            <button 
+            <button
               class="convert-gateway-btn"
               @click="convertToConditionGateway"
-              :disabled="isEdgePartOfGateway"
+              :disabled="!canCreateGateway"
             >
               添加条件网关
             </button>
-            <span class="help-text" v-if="isEdgePartOfGateway">
-              此连线已属于条件网关
+            <span class="help-text">
+              当前路径深度: {{ currentGatewayDepth }}/3
+              <span v-if="!canCreateGateway" style="color: #ef4444; margin-left: 8px;">
+                已达最大深度
+              </span>
             </span>
           </div>
 
@@ -281,22 +284,26 @@
       </aside>
       
       <!-- 右键菜单 -->
-      <div 
-        v-if="contextMenu.visible" 
+      <div
+        v-if="contextMenu.visible"
         class="context-menu"
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         v-click-outside="closeContextMenu"
       >
-        <div 
-          class="context-menu-item" 
+        <div
+          class="context-menu-item"
+          :class="{ 'disabled': !canCreateGatewayFromContextMenu }"
           @click="executeContextMenuAction"
           data-action="convertToGateway"
         >
           添加条件网关
+          <span v-if="!canCreateGatewayFromContextMenu" class="depth-hint">
+            (深度{{ contextMenuGatewayDepth }}/3)
+          </span>
         </div>
         <div class="context-menu-divider"></div>
-        <div 
-          class="context-menu-item" 
+        <div
+          class="context-menu-item"
           @click="closeContextMenu"
         >
           取消
@@ -345,7 +352,7 @@ type CustomEdge = Edge & {
 
 const router = useRouter()
 const workflowStore = useWorkflowStore()
-const { findNode, addEdges, addNodes, updateNodeInternals, removeNodes } = useVueFlow()
+const { findNode, addEdges, addNodes, updateNodeInternals, removeNodes, removeEdges } = useVueFlow()
 const nodes = ref<Node[]>([])
 const edges = ref<CustomEdge[]>([])
 
@@ -374,6 +381,18 @@ const contextMenu = ref({
   y: 0,
   type: 'edge' as 'edge' | 'gateway',
   edgeId: null as string | null
+})
+
+// 右键菜单中选中连线的路径深度
+const contextMenuGatewayDepth = computed(() => {
+  if (!contextMenu.value.edgeId) return 0
+  return calculateTotalPathDepth(contextMenu.value.edgeId)
+})
+
+// 右键菜单中是否可以创建条件网关
+const canCreateGatewayFromContextMenu = computed(() => {
+  if (!contextMenu.value.edgeId) return false
+  return calculateTotalPathDepth(contextMenu.value.edgeId) < 3
 })
 
 const isLabelValid = computed(() => {
@@ -451,10 +470,71 @@ const isEdgeValid = computed(() => {
 })
 
 // 条件网关相关计算属性
-const isEdgePartOfGateway = computed(() => {
+// 计算从起始节点到当前边的路径深度（从根到当前边的边数）
+const calculatePathDepth = (edgeId: string): number => {
+  const visited = new Set<string>()
+
+  const getDepth = (currentEdgeId: string): number => {
+    if (visited.has(currentEdgeId)) return 0
+    visited.add(currentEdgeId)
+
+    const edge = edges.value.find(e => e.id === currentEdgeId)
+    if (!edge) return 0
+
+    // 找到指向源节点的所有边（父边）
+    const parentEdges = edges.value.filter(e => e.target === edge.source)
+    if (parentEdges.length === 0) return 1 // 没有父边，当前就是第1层
+
+    // 递归取最大深度 + 1（当前这层）
+    const maxParentDepth = Math.max(...parentEdges.map(e => getDepth(e.id)))
+    return maxParentDepth + 1
+  }
+
+  return getDepth(edgeId)
+}
+
+// 计算从当前边到最深叶子的深度（从当前边到末端节点的边数）
+const calculateDepthToLeaf = (edgeId: string): number => {
+  const visited = new Set<string>()
+
+  const getDepth = (currentEdgeId: string): number => {
+    if (visited.has(currentEdgeId)) return 0
+    visited.add(currentEdgeId)
+
+    const edge = edges.value.find(e => e.id === currentEdgeId)
+    if (!edge) return 0
+
+    // 找到从目标节点出发的所有边（子边）
+    const childEdges = edges.value.filter(e => e.source === edge.target)
+    if (childEdges.length === 0) return 1 // 没有子边，当前就是最后一层
+
+    // 递归取最大深度 + 1（当前这层）
+    const maxChildDepth = Math.max(...childEdges.map(e => getDepth(e.id)))
+    return maxChildDepth + 1
+  }
+
+  return getDepth(edgeId)
+}
+
+// 计算从根到最深叶子的总路径深度
+const calculateTotalPathDepth = (edgeId: string): number => {
+  const depthFromRoot = calculatePathDepth(edgeId)
+  const depthToLeaf = calculateDepthToLeaf(edgeId)
+  return depthFromRoot + depthToLeaf - 1 // 当前边被计算了两次，减1
+}
+
+// 是否可以创建条件网关（添加网关后总深度不超过3条边）
+const canCreateGateway = computed(() => {
   if (!selectedEdgeId.value) return false
-  const edge = edges.value.find(e => e.id === selectedEdgeId.value)
-  return edge?.isGatewayEdge === true
+  // 添加网关会将一条边拆分成两条，总深度会+1
+  const currentTotalDepth = calculateTotalPathDepth(selectedEdgeId.value)
+  return currentTotalDepth < 3
+})
+
+// 当前路径的总深度（根到最深叶子）
+const currentGatewayDepth = computed(() => {
+  if (!selectedEdgeId.value) return 0
+  return calculateTotalPathDepth(selectedEdgeId.value)
 })
 
 const selectedNode = computed(() => {
@@ -766,20 +846,32 @@ const closeContextMenu = () => {
 const executeContextMenuAction = (event: MouseEvent) => {
   // 遮罩状态下禁用所有操作
   if (showMask.value) return
-  
+
   const action = (event.target as HTMLElement).getAttribute('data-action')
-  
+
   if (action === 'convertToGateway' && contextMenu.value.edgeId) {
+    // 检查是否可以创建条件网关
+    if (!canCreateGatewayFromContextMenu.value) {
+      alert(`当前路径深度为 ${contextMenuGatewayDepth.value}，已达到最大限制(3层)，无法继续添加条件网关`)
+      closeContextMenu()
+      return
+    }
     selectedEdgeId.value = contextMenu.value.edgeId
     convertToConditionGateway()
   }
-  
+
   closeContextMenu()
 }
 
 const convertToConditionGateway = () => {
   if (!selectedEdgeId.value) return
-  
+
+  // 检查路径深度限制
+  if (!canCreateGateway.value) {
+    alert(`当前路径深度为 ${currentGatewayDepth.value}，已达到最大限制(3层)，无法继续添加条件网关`)
+    return
+  }
+
   const edgeIndex = edges.value.findIndex(e => e.id === selectedEdgeId.value)
   if (edgeIndex === -1) return
   
@@ -790,7 +882,12 @@ const convertToConditionGateway = () => {
   const targetNode = findNode(edge.target)
   if (!sourceNode || !targetNode) return
   
-  const gatewayNodeId = `gateway-${edge.id}`
+  // 生成唯一ID
+  const timestamp = Date.now()
+  const gatewayNodeId = `gateway-${timestamp}`
+  const inboundEdgeId = `edge-${timestamp}-in`
+  const outboundEdgeId = `edge-${timestamp}-out`
+  
   const gatewayX = (sourceNode.position.x + targetNode.position.x) / 2
   const gatewayY = (sourceNode.position.y + targetNode.position.y) / 2
   
@@ -819,15 +916,40 @@ const convertToConditionGateway = () => {
     }
   }
   
-  edges.value.splice(edgeIndex, 1)
-  
+  // 删除原边 - 同时从 Vue Flow 内部状态和本地状态中删除
+  removeEdges([edge])
+  edges.value = edges.value.filter((_, index) => index !== edgeIndex)
+
+  // 添加网关节点
   addNodes([gatewayNode])
 
+  // 入边：继承原边所有条件
   const inboundEdge: CustomEdge = {
-    id: `${edge.id}-in`,
+    id: inboundEdgeId,
     source: edge.source,
     sourceHandle: 'bottom',
     target: gatewayNodeId,
+    targetHandle: 'top',
+    label: edge.label || '[P10]',
+    data: {
+      priority: edge.priority || 10,
+      label: edge.label || '[P10]'
+    },
+    priority: edge.priority || 10,
+    statusValue: edge.statusValue,
+    paramName: edge.paramName,
+    paramOperator: edge.paramOperator || 'eq',
+    paramValue: edge.paramValue,
+    isGatewayEdge: true,
+    gatewayNodeId
+  }
+
+  // 出边：默认条件（P10），不继承原边条件
+  const outboundEdge: CustomEdge = {
+    id: outboundEdgeId,
+    source: gatewayNodeId,
+    sourceHandle: 'bottom',
+    target: edge.target,
     targetHandle: 'top',
     label: '[P10]',
     data: { priority: 10, label: '[P10]' },
@@ -836,31 +958,19 @@ const convertToConditionGateway = () => {
     gatewayNodeId
   }
 
-  const outboundEdge: CustomEdge = {
-    id: edge.id,
-    source: gatewayNodeId,
-    sourceHandle: 'bottom',
-    target: edge.target,
-    label: '[P10]',
-    data: { priority: 10, label: '[P10]' },
-    priority: edge.priority || 10,
-    isGatewayEdge: true,
-    gatewayNodeId,
-    statusValue: edge.statusValue,
-    paramName: edge.paramName,
-    paramOperator: edge.paramOperator || 'eq',
-    paramValue: edge.paramValue
-  }
-
+  // 添加新边（同时调用 addEdges 更新 Vue Flow 内部状态，并同步 edges.value）
+  addEdges([inboundEdge, outboundEdge])
   edges.value = [...edges.value, inboundEdge, outboundEdge]
 
-  const outboundEdgeInArray = edges.value.find(e => e.id === outboundEdge.id)
-  if (outboundEdgeInArray) {
-    updateEdgeLabel(outboundEdgeInArray)
-  }
-
+  // 更新节点内部状态（不重置 nodes.value，避免与 addNodes 冲突）
   updateNodeInternals([gatewayNodeId])
-  nodes.value = [...nodes.value]
+
+  // 清除编辑状态和遮罩
+  isEditingEdge.value = false
+  editingEdgeId.value = null
+  showMask.value = false
+  selectedEdgeId.value = null
+  showPropertiesPanel.value = false
 }
 
 const updateNodeLabel = () => {
@@ -944,13 +1054,13 @@ const updateEdgeProperties = () => {
     const edge = edges.value[edgeIndex]
     if (edge) {
       edge.priority = selectedEdge.value.priority
-      
+
       // 更新条件属性
       edge.statusValue = selectedEdge.value.statusValue || undefined
-      
+
       const paramName = selectedEdge.value.paramName?.trim()
       const paramValue = selectedEdge.value.paramValue?.trim()
-      
+
       if (paramName || paramValue) {
         edge.paramName = paramName || undefined
         edge.paramOperator = selectedEdge.value.paramOperator
@@ -961,8 +1071,11 @@ const updateEdgeProperties = () => {
         edge.paramOperator = undefined
         edge.paramValue = undefined
       }
-      
+
       updateEdgeLabel(edge)
+
+      // 触发响应式更新，强制 Vue Flow 重新渲染边
+      edges.value = [...edges.value]
     }
   }
 }
@@ -1618,6 +1731,21 @@ const exportWorkflowToXML = () => {
 
 .context-menu-item:hover {
   background: #f1f5f9;
+}
+
+.context-menu-item.disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.context-menu-item.disabled:hover {
+  background: transparent;
+}
+
+.depth-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-left: 0.5rem;
 }
 
 .context-menu-divider {
