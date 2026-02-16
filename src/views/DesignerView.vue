@@ -59,6 +59,7 @@
           @dragover="onDragOver"
           @drop="onDrop"
           @nodeClick="onNodeClick"
+          @nodeContextMenu="onNodeContextMenu"
           @paneClick="onPaneClick"
           @connect="onConnect"
           @edgeClick="onEdgeClick"
@@ -207,23 +208,6 @@
             <span class="help-text">数字越小优先级越高（0-10）</span>
           </div>
 
-          <!-- 添加条件网关按钮 -->
-          <div class="form-group">
-            <button
-              class="convert-gateway-btn"
-              @click="convertToConditionGateway"
-              :disabled="!canCreateGateway"
-            >
-              添加条件网关
-            </button>
-            <span class="help-text">
-              当前路径深度: {{ currentGatewayDepth }}/3
-              <span v-if="!canCreateGateway" style="color: #ef4444; margin-left: 8px;">
-                已达最大深度
-              </span>
-            </span>
-          </div>
-
           <!-- 条件配置 -->
           <div class="form-group">
             <label>条件配置</label>
@@ -290,17 +274,40 @@
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         v-click-outside="closeContextMenu"
       >
-        <div
-          class="context-menu-item"
-          :class="{ 'disabled': !canCreateGatewayFromContextMenu }"
-          @click="executeContextMenuAction"
-          data-action="convertToGateway"
-        >
-          添加条件网关
-          <span v-if="!canCreateGatewayFromContextMenu" class="depth-hint">
-            (深度{{ contextMenuGatewayDepth }}/3)
-          </span>
-        </div>
+        <!-- 连线菜单 -->
+        <template v-if="contextMenu.type === 'edge'">
+          <div
+            class="context-menu-item"
+            :class="{ 'disabled': !canCreateGatewayFromContextMenu }"
+            @click="executeContextMenuAction"
+            data-action="convertToGateway"
+          >
+            添加条件网关
+            <span v-if="!canCreateGatewayFromContextMenu" class="depth-hint">
+              (深度{{ contextMenuGatewayDepth }}/3)
+            </span>
+          </div>
+          <div class="context-menu-divider"></div>
+          <div
+            class="context-menu-item danger"
+            @click="executeContextMenuAction"
+            data-action="deleteEdge"
+          >
+            删除
+          </div>
+        </template>
+        
+        <!-- 节点菜单 -->
+        <template v-else-if="contextMenu.type === 'node'">
+          <div
+            class="context-menu-item danger"
+            @click="executeContextMenuAction"
+            data-action="deleteNode"
+          >
+            删除
+          </div>
+        </template>
+        
         <div class="context-menu-divider"></div>
         <div
           class="context-menu-item"
@@ -309,6 +316,21 @@
           取消
         </div>
       </div>
+
+      <!-- 确认弹框 -->
+      <dialog ref="confirmDialog" class="confirm-dialog">
+        <form method="dialog" @submit.prevent>
+          <div class="confirm-header">
+            <span class="confirm-icon">⚠️</span>
+            <span class="confirm-title">确认删除</span>
+          </div>
+          <div class="confirm-message">{{ confirmMessage }}</div>
+          <div class="confirm-actions">
+            <button type="button" class="confirm-btn cancel" @click="cancelDelete">取消</button>
+            <button type="button" class="confirm-btn primary" @click="confirmDelete">确认</button>
+          </div>
+        </form>
+      </dialog>
     </div>
   </div>
 </template>
@@ -379,9 +401,15 @@ const contextMenu = ref({
   visible: false,
   x: 0,
   y: 0,
-  type: 'edge' as 'edge' | 'gateway',
-  edgeId: null as string | null
+  type: 'edge' as 'edge' | 'node',
+  edgeId: null as string | null,
+  nodeId: null as string | null
 })
+
+// 确认弹框相关状态
+const confirmDialog = ref<HTMLDialogElement | null>(null)
+const confirmMessage = ref('')
+const pendingDeleteAction = ref<{ type: 'node' | 'edge'; id: string } | null>(null)
 
 // 右键菜单中选中连线的路径深度
 const contextMenuGatewayDepth = computed(() => {
@@ -394,6 +422,12 @@ const canCreateGatewayFromContextMenu = computed(() => {
   if (!contextMenu.value.edgeId) return false
   return calculateTotalPathDepth(contextMenu.value.edgeId) < 3
 })
+
+// 判断节点是否为条件网关
+const isConditionGateway = (nodeId: string): boolean => {
+  const node = findNode(nodeId)
+  return node?.data?.isConditionGateway === true
+}
 
 const isLabelValid = computed(() => {
   return validateField(selectedNode.value?.label)
@@ -849,6 +883,98 @@ const executeContextMenuAction = (event: MouseEvent) => {
 
   const action = (event.target as HTMLElement).getAttribute('data-action')
 
+  // 删除节点
+  if (action === 'deleteNode' && contextMenu.value.nodeId) {
+    const nodeId = contextMenu.value.nodeId
+    
+    // 1. 找到所有直接关联的节点（排除条件网关）
+    const relatedNodeIds = new Set<string>()
+    edges.value.forEach(e => {
+      if (e.source === nodeId && !isConditionGateway(e.target)) {
+        relatedNodeIds.add(e.target)
+      }
+      if (e.target === nodeId && !isConditionGateway(e.source)) {
+        relatedNodeIds.add(e.source)
+      }
+    })
+
+    // 2. 计算需要删除的连线数量和条件网关数量
+    // 找到被删除节点的所有直接边
+    const directEdges = edges.value.filter(
+      e => e.source === nodeId || e.target === nodeId
+    )
+    
+    // BFS 找到从被删除节点出发的所有可达节点
+    const visited = new Set<string>([nodeId])
+    const queue = [nodeId]
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const outgoingEdges = edges.value.filter(e => e.source === current)
+      outgoingEdges.forEach(e => {
+        if (!visited.has(e.target)) {
+          visited.add(e.target)
+          queue.push(e.target)
+        }
+      })
+    }
+    
+    // 收集所有需要删除的边（被删除节点的所有边 + 可达节点之间的所有边）
+    const edgesToDelete = [...directEdges]
+    edges.value.forEach(e => {
+      if (visited.has(e.source) && visited.has(e.target)) {
+        if (!edgesToDelete.includes(e)) {
+          edgesToDelete.push(e)
+        }
+      }
+    })
+    
+    // 统计连线和网关数量
+    let edgeCount = 0
+    let gatewayCount = 0
+    
+    edgesToDelete.forEach(e => {
+      // 被删除节点是起点：统计所有可达节点间的边
+      if (e.source === nodeId) {
+        edgeCount++
+      }
+      // 被删除节点是目标：只统计直接相连的边
+      else if (e.target === nodeId) {
+        edgeCount++
+      }
+      // 统计条件网关
+      if (isConditionGateway(e.source)) {
+        gatewayCount++
+      }
+    })
+    
+    // 显示确认弹框
+    const parts: string[] = []
+    if (edgeCount > 0) parts.push(`${edgeCount} 条连线`)
+    if (gatewayCount > 0) parts.push(`${gatewayCount} 个条件网关`)
+    
+    if (parts.length > 0) {
+      confirmMessage.value = `确定要删除该节点吗？此操作将同时删除${parts.join('和')}。`
+    } else {
+      confirmMessage.value = '确定要删除该节点吗？'
+    }
+    
+    pendingDeleteAction.value = { type: 'node', id: nodeId }
+    closeContextMenu()
+    confirmDialog.value?.showModal()
+    return
+  }
+
+  // 删除连线
+  if (action === 'deleteEdge' && contextMenu.value.edgeId) {
+    confirmMessage.value = '确定要删除该连线吗？'
+    pendingDeleteAction.value = { type: 'edge', id: contextMenu.value.edgeId }
+    closeContextMenu()
+    confirmDialog.value?.showModal()
+    return
+  }
+
+  // 添加条件网关
   if (action === 'convertToGateway' && contextMenu.value.edgeId) {
     // 检查是否可以创建条件网关
     if (!canCreateGatewayFromContextMenu.value) {
@@ -861,6 +987,75 @@ const executeContextMenuAction = (event: MouseEvent) => {
   }
 
   closeContextMenu()
+}
+
+const confirmDelete = () => {
+  if (!pendingDeleteAction.value) return
+  
+  const action = pendingDeleteAction.value
+  
+  if (action.type === 'node') {
+    const nodeId = action.id
+    
+    // 1. 找到被删除节点的所有直接边
+    const directEdges = edges.value.filter(
+      e => e.source === nodeId || e.target === nodeId
+    )
+    
+    // 2. BFS 找到从被删除节点出发的所有可达节点
+    const visited = new Set<string>([nodeId])
+    const queue = [nodeId]
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const outgoingEdges = edges.value.filter(e => e.source === current)
+      outgoingEdges.forEach(e => {
+        if (!visited.has(e.target)) {
+          visited.add(e.target)
+          queue.push(e.target)
+        }
+      })
+    }
+    
+    // 3. 收集所有需要删除的边（被删除节点的所有边 + 可达节点之间的所有边）
+    const edgesToDelete: typeof directEdges = [...directEdges]
+    edges.value.forEach(e => {
+      if (visited.has(e.source) && visited.has(e.target)) {
+        if (!edgesToDelete.includes(e)) {
+          edgesToDelete.push(e)
+        }
+      }
+    })
+    
+    // 4. 收集需要删除的条件网关节点
+    const gatewaysToDelete = new Set<string>()
+    edgesToDelete.forEach(e => {
+      if (isConditionGateway(e.source)) {
+        gatewaysToDelete.add(e.source)
+      }
+    })
+    
+    // 5. 执行删除边
+    edgesToDelete.forEach(e => removeEdges([e.id]))
+    edges.value = edges.value.filter(e => !edgesToDelete.includes(e))
+    
+    // 6. 删除条件网关节点
+    gatewaysToDelete.forEach(gwId => removeNodes([gwId]))
+    
+    // 7. 删除原始节点
+    removeNodes([nodeId])
+  } else if (action.type === 'edge') {
+    removeEdges([action.id])
+    edges.value = edges.value.filter(e => e.id !== action.id)
+  }
+  
+  pendingDeleteAction.value = null
+  confirmDialog.value?.close()
+}
+
+const cancelDelete = () => {
+  pendingDeleteAction.value = null
+  confirmDialog.value?.close()
 }
 
 const convertToConditionGateway = () => {
@@ -1276,14 +1471,31 @@ const onEdgeContextMenu = (event: any) => {
   // 遮罩状态下禁用所有操作
   if (showMask.value) return
 
-  event.originalEvent?.preventDefault()
+  event.event?.preventDefault()
 
   contextMenu.value = {
     visible: true,
-    x: event.originalEvent?.clientX || 0,
-    y: event.originalEvent?.clientY || 0,
+    x: event.event?.clientX || 0,
+    y: event.event?.clientY || 0,
     type: 'edge',
-    edgeId: event.edge?.id || null
+    edgeId: event.edge?.id || null,
+    nodeId: null
+  }
+}
+
+const onNodeContextMenu = (event: any) => {
+  // 遮罩状态下禁用所有操作
+  if (showMask.value) return
+
+  event.event?.preventDefault()
+
+  contextMenu.value = {
+    visible: true,
+    x: event.event?.clientX || 0,
+    y: event.event?.clientY || 0,
+    type: 'node',
+    edgeId: null,
+    nodeId: event.node?.id || null
   }
 }
 
@@ -1712,24 +1924,30 @@ const exportWorkflowToXML = () => {
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  background: rgba(248, 250, 252, 0.65);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
   z-index: 1000;
   min-width: 160px;
   overflow: hidden;
+  padding: 0.5rem 0;
 }
 
 .context-menu-item {
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.15s ease;
   font-size: 0.875rem;
+  color: #1e293b;
+  border-radius: 0.375rem;
+  margin: 0 0.375rem;
 }
 
 .context-menu-item:hover {
-  background: #f1f5f9;
+  background: rgba(0, 0, 0, 0.06);
+  color: #0f172a;
 }
 
 .context-menu-item.disabled {
@@ -1739,6 +1957,7 @@ const exportWorkflowToXML = () => {
 
 .context-menu-item.disabled:hover {
   background: transparent;
+  color: #94a3b8;
 }
 
 .depth-hint {
@@ -1747,9 +1966,111 @@ const exportWorkflowToXML = () => {
   margin-left: 0.5rem;
 }
 
+.context-menu-item.danger {
+  color: #1e293b;
+}
+
+.context-menu-item.danger:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #0f172a;
+}
+
 .context-menu-divider {
   height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 0.5rem 0;
+}
+
+/* 确认弹框样式 */
+.confirm-dialog {
+  background: rgba(248, 250, 252, 0.75);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  min-width: 380px;
+  max-width: 420px;
+  color: #1e293b;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  margin: auto;
+  position: fixed;
+  inset: 0;
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.confirm-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.confirm-icon {
+  font-size: 1.5rem;
+}
+
+.confirm-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.confirm-message {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.confirm-btn {
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.confirm-btn.cancel {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.confirm-btn.cancel:hover {
   background: #e2e8f0;
-  margin: 0.25rem 0;
+}
+
+.confirm-btn.danger {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.confirm-btn.danger:hover {
+  background: #e2e8f0;
+}
+
+.confirm-btn.primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.confirm-btn.primary:hover {
+  background: #2563eb;
 }
 </style>
