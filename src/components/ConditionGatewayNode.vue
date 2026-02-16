@@ -31,7 +31,7 @@ const props = defineProps<{
   label: string
   color?: string
   conditions?: {
-    statusValue?: string
+    statusCode?: string
     paramName?: string
     paramOperator?: string
     paramValue?: string
@@ -40,7 +40,7 @@ const props = defineProps<{
     id: string
     targetNodeId: string
     conditions?: {
-      statusValue?: string
+      statusCode?: string
       paramName?: string
       paramOperator?: string
       paramValue?: string

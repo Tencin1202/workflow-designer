@@ -5,7 +5,7 @@ export type ConditionOperator = 'eq' | 'ne' | 'contains' | 'regex'
 
 // 条件配置
 export interface EdgeConditionConfig {
-  statusValue?: string  // Status 条件值
+  statusCode?: string  // statusCode 条件值
   paramName?: string   // 参数名
   paramOperator?: ConditionOperator  // 关系
   paramValue?: string  // 参数值
@@ -62,12 +62,12 @@ export interface WorkflowData {
 // 获取操作符显示文本
 export function getOperatorText(operator?: string): string {
   const map: Record<string, string> = {
-    'eq': '=',
-    'ne': '≠',
-    'contains': '⊆',
-    'regex': '~'
+    'eq': 'equals',
+    'ne': 'notEqual',
+    'contains': 'contains',
+    'regex': 'matches'
   }
-  return map[operator || 'eq'] || '='
+  return map[operator || 'eq'] || 'equals'
 }
 
 // 获取条件显示文本
@@ -76,8 +76,8 @@ export function getConditionDisplayText(conditions?: EdgeConditionConfig): strin
   
   const parts: string[] = []
   
-  if (conditions.statusValue) {
-    parts.push(`status=${conditions.statusValue}`)
+  if (conditions.statusCode) {
+    parts.push(`statusCode=${conditions.statusCode}`)
   }
   
   if (conditions.paramName && conditions.paramValue) {
@@ -112,14 +112,14 @@ function parseNestedEdges(edgeElement: Element, level: number = 0, parentId?: st
     const targetNodeId = childEdge.getAttribute('target')
     if (!targetNodeId) return
     
-    const statusValue = childEdge.getAttribute('statusValue') || undefined
+    const statusCode = childEdge.getAttribute('statusCode') || undefined
     const paramName = childEdge.getAttribute('paramName') || undefined
     const paramOperator = (childEdge.getAttribute('paramOperator') as ConditionOperator) || undefined
     const paramValue = childEdge.getAttribute('paramValue') || undefined
     
     const conditions: EdgeConditionConfig = {}
-    if (statusValue || paramName || paramValue) {
-      conditions.statusValue = statusValue
+    if (statusCode || paramName || paramValue) {
+      conditions.statusCode = statusCode
       conditions.paramName = paramName
       conditions.paramOperator = paramOperator
       conditions.paramValue = paramValue
@@ -202,14 +202,14 @@ export const parseXML = (xmlString: string): WorkflowData => {
     let gatewayConditions: EdgeConditionConfig | undefined
     
     if (isGateway) {
-      const statusValue = nodeEl.getAttribute('statusValue') || undefined
+      const statusCode = nodeEl.getAttribute('statusCode') || undefined
       const paramName = nodeEl.getAttribute('paramName') || undefined
       const paramOperator = (nodeEl.getAttribute('paramOperator') as ConditionOperator) || undefined
       const paramValue = nodeEl.getAttribute('paramValue') || undefined
       
-      if (statusValue || paramName || paramValue) {
+      if (statusCode || paramName || paramValue) {
         gatewayConditions = {
-          statusValue,
+          statusCode,
           paramName,
           paramOperator,
           paramValue
@@ -257,14 +257,14 @@ export const parseXML = (xmlString: string): WorkflowData => {
         throw new Error(`第${index + 1}条连线缺少source或target属性`)
       }
       
-      const statusValue = edgeEl.getAttribute('statusValue') || undefined
+      const statusCode = edgeEl.getAttribute('statusCode') || undefined
       const paramName = edgeEl.getAttribute('paramName') || undefined
       const paramOperator = (edgeEl.getAttribute('paramOperator') as ConditionOperator) || undefined
       const paramValue = edgeEl.getAttribute('paramValue') || undefined
       
       const conditions: EdgeConditionConfig | undefined = (
-        statusValue || paramName || paramValue
-      ) ? { statusValue, paramName, paramOperator, paramValue } : undefined
+        statusCode || paramName || paramValue
+      ) ? { statusCode, paramName, paramOperator, paramValue } : undefined
       
       const edgeId = `e${Date.now()}-${index}`
       
@@ -315,8 +315,8 @@ function generateConditionsXML(conditions?: EdgeConditionConfig): string {
   if (!conditions) return ''
   
   let xml = ''
-  if (conditions.statusValue) {
-    xml += ` statusValue="${conditions.statusValue}"`
+  if (conditions.statusCode) {
+    xml += ` statusCode="${conditions.statusCode}"`
   }
   if (conditions.paramName) {
     xml += ` paramName="${conditions.paramName}"`

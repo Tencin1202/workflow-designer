@@ -228,13 +228,13 @@
           <div class="form-group">
             <label>条件配置</label>
             
-            <!-- Status 条件 -->
+            <!-- statusCode 条件 -->
             <div class="condition-section">
-              <div class="condition-title">Status 条件</div>
+              <div class="condition-title">statusCode 条件</div>
               <div class="form-group">
                 <label>状态值</label>
                 <input 
-                  v-model="selectedEdge.statusValue"
+                  v-model="selectedEdge.statusCode"
                   class="form-input"
                   placeholder="输入数字或留空"
                   @input="handleConditionInput"
@@ -324,7 +324,7 @@ import CustomNode from '@/components/CustomNode.vue'
 import ConditionGatewayNode from '@/components/ConditionGatewayNode.vue'
 import { useWorkflowStore } from '@/stores/workflow'
 import type { WorkflowData, EdgeConditionConfig, ConditionBranch, ConditionOperator } from '@/utils/xmlParser'
-import { generateXML } from '@/utils/xmlParser'
+import { generateXML, getOperatorText } from '@/utils/xmlParser'
 import type { Node, Edge, MarkerType, ConnectionLineType, Connection } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -332,7 +332,7 @@ import '@vue-flow/core/dist/theme-default.css'
 // 扩展 Edge 类型的辅助类型
 type CustomEdge = Edge & {
   priority?: number
-  statusValue?: string
+  statusCode?: string
   paramName?: string
   paramOperator?: string
   paramValue?: string
@@ -340,7 +340,7 @@ type CustomEdge = Edge & {
     id: string
     targetNodeId: string
     conditions: {
-      statusValue?: string
+      statusCode?: string
       paramName?: string
       paramOperator?: string
       paramValue?: string
@@ -438,7 +438,7 @@ const selectedEdge = computed(() => {
     source: customEdge.source,
     target: customEdge.target,
     priority: customEdge.priority ?? 10,
-    statusValue: customEdge.statusValue || '',
+    statusCode: customEdge.statusCode || '',
     paramName: customEdge.paramName || '',
     paramOperator: customEdge.paramOperator || 'eq',
     paramValue: customEdge.paramValue || ''
@@ -625,19 +625,19 @@ const loadImportedWorkflow = (data: WorkflowData) => {
     
     // 支持嵌套的conditions和扁平的属性
     const conditions = edge.conditions
-    const statusValue = conditions?.statusValue || (edge as { statusValue?: string }).statusValue
+    const statusCode = conditions?.statusCode || (edge as { statusCode?: string }).statusCode
     const paramName = conditions?.paramName || (edge as { paramName?: string }).paramName
     const paramOperator = conditions?.paramOperator || (edge as { paramOperator?: string }).paramOperator || 'eq'
     const paramValue = conditions?.paramValue || (edge as { paramValue?: string }).paramValue
     
-    // Status 条件
-    if (statusValue) {
-      parts.push(`status=${statusValue}`)
+    // statusCode 条件
+    if (statusCode) {
+      parts.push(`statusCode=${statusCode}`)
     }
     
     // 参数条件
     if (paramName && paramValue) {
-      parts.push(`${paramName}=${paramValue}`)
+      parts.push(`param=${paramName}, value=${paramValue}, operator=${getOperatorText(paramOperator)}`)
     }
     
     return {
@@ -646,7 +646,7 @@ const loadImportedWorkflow = (data: WorkflowData) => {
       target: edge.target,
       priority,
       // 扁平的属性供模板使用
-      statusValue: statusValue || '',
+      statusCode: statusCode || '',
       paramName: paramName || '',
       paramOperator: paramOperator,
       paramValue: paramValue || '',
@@ -655,7 +655,7 @@ const loadImportedWorkflow = (data: WorkflowData) => {
         id: branch.id,
         targetNodeId: branch.targetNodeId,
         conditions: {
-          statusValue: branch.conditions.statusValue,
+          statusCode: branch.conditions.statusCode,
           paramName: branch.conditions.paramName,
           paramOperator: branch.conditions.paramOperator || 'eq',
           paramValue: branch.conditions.paramValue
@@ -800,8 +800,8 @@ const onPaneClick = () => {
   if (showMask.value && isFirstCreation.value) {
     // 检查是否需要删除节点：
     // - 还没开始输入，或者
-    // - 开始输入了但名称不合法
-    const shouldDeleteNode = !hasStartedTyping.value || !isLabelValid.value
+    // - 开始输入了但有必填字段不合法
+    const shouldDeleteNode = !hasStartedTyping.value || !areAllRequiredFieldsValid.value
     
     if (shouldDeleteNode && editingNodeId.value) {
       // 删除正在创建的节点
@@ -936,7 +936,7 @@ const convertToConditionGateway = () => {
       label: edge.label || '[P10]'
     },
     priority: edge.priority || 10,
-    statusValue: edge.statusValue,
+    statusCode: edge.statusCode,
     paramName: edge.paramName,
     paramOperator: edge.paramOperator || 'eq',
     paramValue: edge.paramValue,
@@ -1028,14 +1028,14 @@ const updateEdgeLabel = (edge: CustomEdge) => {
   const priority = edge.priority ?? 10
   const parts: string[] = [`P${priority}`]
   
-  // Status 条件
-  if (edge.statusValue) {
-    parts.push(`status=${edge.statusValue}`)
+  // statusCode 条件
+  if (edge.statusCode) {
+    parts.push(`statusCode=${edge.statusCode}`)
   }
   
   // 参数条件
   if (edge.paramName && edge.paramValue) {
-    parts.push(`${edge.paramName}=${edge.paramValue}`)
+    parts.push(`param=${edge.paramName}, value=${edge.paramValue}, operator=${getOperatorText(edge.paramOperator)}`)
   }
   
   edge.label = `[${parts.join(', ')}]`
@@ -1056,7 +1056,7 @@ const updateEdgeProperties = () => {
       edge.priority = selectedEdge.value.priority
 
       // 更新条件属性
-      edge.statusValue = selectedEdge.value.statusValue || undefined
+      edge.statusCode = selectedEdge.value.statusCode || undefined
 
       const paramName = selectedEdge.value.paramName?.trim()
       const paramValue = selectedEdge.value.paramValue?.trim()
@@ -1158,7 +1158,7 @@ const onConnect = (connection: Connection) => {
       label: '[P10]'
     },
     priority: 10,
-    statusValue: undefined,
+    statusCode: undefined,
     paramName: undefined,
     paramOperator: 'eq',
     paramValue: undefined
@@ -1320,8 +1320,8 @@ const exportWorkflowToXML = () => {
     })),
     edges: edges.value.map((edge, index) => {
       const customEdge = edge as CustomEdge
-      const conditions: EdgeConditionConfig | undefined = customEdge.statusValue || customEdge.paramName ? {
-        statusValue: customEdge.statusValue || undefined,
+      const conditions: EdgeConditionConfig | undefined = customEdge.statusCode || customEdge.paramName ? {
+        statusCode: customEdge.statusCode || undefined,
         paramName: customEdge.paramName || undefined,
         paramOperator: customEdge.paramOperator as ConditionOperator,
         paramValue: customEdge.paramValue || undefined
@@ -1331,7 +1331,7 @@ const exportWorkflowToXML = () => {
         id: branch.id,
         targetNodeId: branch.targetNodeId,
         conditions: {
-          statusValue: branch.conditions.statusValue || undefined,
+          statusCode: branch.conditions.statusCode || undefined,
           paramName: branch.conditions.paramName || undefined,
           paramOperator: (branch.conditions.paramOperator as ConditionOperator) || 'eq',
           paramValue: branch.conditions.paramValue || undefined
@@ -1598,7 +1598,6 @@ const exportWorkflowToXML = () => {
   font-size: 0.75rem;
   font-weight: 600;
   color: #3b82f6;
-  text-transform: uppercase;
   margin-bottom: 0.5rem;
 }
 
