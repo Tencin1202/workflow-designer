@@ -307,14 +307,6 @@
             删除
           </div>
         </template>
-        
-        <div class="context-menu-divider"></div>
-        <div
-          class="context-menu-item"
-          @click="closeContextMenu"
-        >
-          取消
-        </div>
       </div>
 
       <!-- 确认弹框 -->
