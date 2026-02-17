@@ -108,7 +108,8 @@
               @input="handleInput"
             />
             <span v-if="hasStartedTyping && !isLabelValid" class="error-text">
-              名称为1-32个非空白字符
+              <span v-if="!validateField(selectedNode?.label)">名称为1-32个非空白字符</span>
+              <span v-else>名称不能与其他节点重复</span>
             </span>
           </div>
           
@@ -366,14 +367,21 @@ type CustomEdge = Edge & {
 
 const router = useRouter()
 const workflowStore = useWorkflowStore()
-const { findNode, addEdges, addNodes, updateNodeInternals, removeNodes, removeEdges } = useVueFlow()
-const nodes = ref<Node[]>([])
+const { findNode, addEdges, addNodes, updateNodeInternals, removeNodes, removeEdges, nodes } = useVueFlow()
 const edges = ref<CustomEdge[]>([])
 
 const validateField = (value: string | undefined): boolean => {
   if (!value) return false
   const trimmed = value.trim()
   return trimmed.length > 0 && trimmed.length <= 32
+}
+
+const isLabelUnique = (label: string, excludeNodeId?: string): boolean => {
+  const trimmed = label.trim()
+  if (!trimmed) return false
+  return nodes.value.every(node =>
+    node.id === excludeNodeId || node.data?.label?.trim() !== trimmed
+  )
 }
 
 const workflowName = ref('未命名工作流')
@@ -422,7 +430,8 @@ const isConditionGateway = (nodeId: string): boolean => {
 }
 
 const isLabelValid = computed(() => {
-  return validateField(selectedNode.value?.label)
+  if (!validateField(selectedNode.value?.label)) return false
+  return isLabelUnique(selectedNode.value?.label || '', selectedNodeId.value || undefined)
 })
 
 const isProcessorValid = computed(() => {
@@ -695,8 +704,8 @@ const loadImportedWorkflow = (data: WorkflowData) => {
     }
   })
   
-  nodes.value = importedNodes
-  edges.value = importedEdges
+  importedNodes.forEach(node => addNodes([node]))
+  importedEdges.forEach(edge => addEdges([edge]))
 }
 
 // 组件挂载时检查是否有导入数据
@@ -1149,7 +1158,6 @@ const convertToConditionGateway = () => {
   addEdges([inboundEdge, outboundEdge])
   edges.value = [...edges.value, inboundEdge, outboundEdge]
 
-  // 更新节点内部状态（不重置 nodes.value，避免与 addNodes 冲突）
   updateNodeInternals([gatewayNodeId])
 
   // 清除编辑状态和遮罩
