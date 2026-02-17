@@ -414,13 +414,17 @@ const pendingDeleteAction = ref<{ type: 'node' | 'edge'; id: string } | null>(nu
 // 右键菜单中选中连线的路径深度
 const contextMenuGatewayDepth = computed(() => {
   if (!contextMenu.value.edgeId) return 0
-  return calculateTotalPathDepth(contextMenu.value.edgeId)
+  const edge = edges.value.find(e => e.id === contextMenu.value.edgeId)
+  if (!edge) return 0
+  return calculateEdgeDepth(edge.source, edge.target)
 })
 
 // 右键菜单中是否可以创建条件网关
 const canCreateGatewayFromContextMenu = computed(() => {
   if (!contextMenu.value.edgeId) return false
-  return calculateTotalPathDepth(contextMenu.value.edgeId) < 3
+  const edge = edges.value.find(e => e.id === contextMenu.value.edgeId)
+  if (!edge) return false
+  return calculateEdgeDepth(edge.source, edge.target) < 3
 })
 
 // 判断节点是否为条件网关
@@ -505,72 +509,63 @@ const isEdgeValid = computed(() => {
 })
 
 // 条件网关相关计算属性
-// 计算从起始节点到当前边的路径深度（从根到当前边的边数）
-const calculatePathDepth = (edgeId: string): number => {
+
+// 找到原始源节点（沿着入边向上找，直到非网关节点）
+const findOriginalSource = (nodeId: string): string => {
+  const node = nodes.value.find(n => n.id === nodeId)
+  if (!node || !node.data?.isConditionGateway) return nodeId
+  
+  const incomingEdge = edges.value.find(e => e.target === nodeId)
+  if (!incomingEdge) return nodeId
+  
+  return findOriginalSource(incomingEdge.source)
+}
+
+// 找到最终目标节点（沿着出边向下找，直到非网关节点）
+const findFinalTarget = (nodeId: string): string => {
+  const node = nodes.value.find(n => n.id === nodeId)
+  if (!node || !node.data?.isConditionGateway) return nodeId
+  
+  const outgoingEdge = edges.value.find(e => e.source === nodeId)
+  if (!outgoingEdge) return nodeId
+  
+  return findFinalTarget(outgoingEdge.target)
+}
+
+// 计算从原始源节点到最终目标节点之间的边数（条件网关深度）
+const calculateEdgeDepth = (sourceId: string, targetId: string): number => {
+  // 找到原始节点（非网关节点）
+  const originalSource = findOriginalSource(sourceId)
+  const finalTarget = findFinalTarget(targetId)
+  
+  if (originalSource === finalTarget) return 0
+  
   const visited = new Set<string>()
-
-  const getDepth = (currentEdgeId: string): number => {
-    if (visited.has(currentEdgeId)) return 0
-    visited.add(currentEdgeId)
-
-    const edge = edges.value.find(e => e.id === currentEdgeId)
-    if (!edge) return 0
-
-    // 找到指向源节点的所有边（父边）
-    const parentEdges = edges.value.filter(e => e.target === edge.source)
-    if (parentEdges.length === 0) return 1 // 没有父边，当前就是第1层
-
-    // 递归取最大深度 + 1（当前这层）
-    const maxParentDepth = Math.max(...parentEdges.map(e => getDepth(e.id)))
-    return maxParentDepth + 1
+  let maxDepth = 0
+  
+  const dfs = (currentNodeId: string, depth: number) => {
+    if (currentNodeId === finalTarget) {
+      maxDepth = Math.max(maxDepth, depth)
+      return
+    }
+    
+    visited.add(currentNodeId)
+    
+    const outgoingEdges = edges.value.filter(e => e.source === currentNodeId)
+    
+    for (const edge of outgoingEdges) {
+      if (!visited.has(edge.target)) {
+        dfs(edge.target, depth + 1)
+      }
+    }
+    
+    visited.delete(currentNodeId)
   }
-
-  return getDepth(edgeId)
+  
+  dfs(originalSource, 0)
+  
+  return maxDepth
 }
-
-// 计算从当前边到最深叶子的深度（从当前边到末端节点的边数）
-const calculateDepthToLeaf = (edgeId: string): number => {
-  const visited = new Set<string>()
-
-  const getDepth = (currentEdgeId: string): number => {
-    if (visited.has(currentEdgeId)) return 0
-    visited.add(currentEdgeId)
-
-    const edge = edges.value.find(e => e.id === currentEdgeId)
-    if (!edge) return 0
-
-    // 找到从目标节点出发的所有边（子边）
-    const childEdges = edges.value.filter(e => e.source === edge.target)
-    if (childEdges.length === 0) return 1 // 没有子边，当前就是最后一层
-
-    // 递归取最大深度 + 1（当前这层）
-    const maxChildDepth = Math.max(...childEdges.map(e => getDepth(e.id)))
-    return maxChildDepth + 1
-  }
-
-  return getDepth(edgeId)
-}
-
-// 计算从根到最深叶子的总路径深度
-const calculateTotalPathDepth = (edgeId: string): number => {
-  const depthFromRoot = calculatePathDepth(edgeId)
-  const depthToLeaf = calculateDepthToLeaf(edgeId)
-  return depthFromRoot + depthToLeaf - 1 // 当前边被计算了两次，减1
-}
-
-// 是否可以创建条件网关（添加网关后总深度不超过3条边）
-const canCreateGateway = computed(() => {
-  if (!selectedEdgeId.value) return false
-  // 添加网关会将一条边拆分成两条，总深度会+1
-  const currentTotalDepth = calculateTotalPathDepth(selectedEdgeId.value)
-  return currentTotalDepth < 3
-})
-
-// 当前路径的总深度（根到最深叶子）
-const currentGatewayDepth = computed(() => {
-  if (!selectedEdgeId.value) return 0
-  return calculateTotalPathDepth(selectedEdgeId.value)
-})
 
 const selectedNode = computed(() => {
   if (!selectedNodeId.value) return null
@@ -977,11 +972,15 @@ const executeContextMenuAction = (event: MouseEvent) => {
 
   // 添加条件网关
   if (action === 'convertToGateway' && contextMenu.value.edgeId) {
-    // 检查是否可以创建条件网关
-    if (!canCreateGatewayFromContextMenu.value) {
-      alert(`当前路径深度为 ${contextMenuGatewayDepth.value}，已达到最大限制(3层)，无法继续添加条件网关`)
-      closeContextMenu()
-      return
+    // 直接检查深度
+    const edge = edges.value.find(e => e.id === contextMenu.value.edgeId)
+    if (edge) {
+      const depth = calculateEdgeDepth(edge.source, edge.target)
+      if (depth >= 3) {
+        alert(`当前路径深度为 ${depth}，已达到最大限制(3层)，无法继续添加条件网关`)
+        closeContextMenu()
+        return
+      }
     }
     selectedEdgeId.value = contextMenu.value.edgeId
     convertToConditionGateway()
@@ -1062,17 +1061,18 @@ const cancelDelete = () => {
 const convertToConditionGateway = () => {
   if (!selectedEdgeId.value) return
 
-  // 检查路径深度限制
-  if (!canCreateGateway.value) {
-    alert(`当前路径深度为 ${currentGatewayDepth.value}，已达到最大限制(3层)，无法继续添加条件网关`)
-    return
-  }
-
   const edgeIndex = edges.value.findIndex(e => e.id === selectedEdgeId.value)
   if (edgeIndex === -1) return
   
   const edge = edges.value[edgeIndex]
   if (!edge) return
+
+  // 直接计算深度，而不是依赖 computed
+  const currentDepth = calculateEdgeDepth(edge.source, edge.target)
+  if (currentDepth >= 3) {
+    alert(`当前路径深度为 ${currentDepth}，已达到最大限制(3层)，无法继续添加条件网关`)
+    return
+  }
   
   const sourceNode = findNode(edge.source)
   const targetNode = findNode(edge.target)
