@@ -194,19 +194,16 @@
           <!-- 优先级 -->
           <div class="form-group">
             <label>优先级 <span class="required">*</span></label>
-            <input 
+            <select 
               v-model.number="selectedEdge.priority"
-              type="number"
-              min="0"
-              max="10"
               class="form-input"
-              :class="{ 'is-error': hasStartedTypingPriority && !isPriorityValid }"
-              @input="handlePriorityInput"
-            />
-            <span v-if="hasStartedTypingPriority && !isPriorityValid" class="error-text">
-              优先级必须在 0-10 之间
-            </span>
-            <span class="help-text">数字越小优先级越高（0-10）</span>
+              @change="handlePriorityInput"
+            >
+              <option v-for="p in availablePriorities" :key="p" :value="p">
+                {{ p }}{{ p === 0 ? ' (最高)' : p === 10 ? ' (最低)' : '' }}
+              </option>
+            </select>
+            <span class="help-text">数字越小优先级越高（0-10），同一连接点的优先级不可重复</span>
           </div>
 
           <!-- 条件配置 -->
@@ -475,6 +472,7 @@ const selectedEdge = computed(() => {
   return {
     id: customEdge.id,
     source: customEdge.source,
+    sourceHandle: customEdge.sourceHandle,
     target: customEdge.target,
     priority: customEdge.priority ?? 10,
     statusCode: customEdge.statusCode || '',
@@ -482,6 +480,16 @@ const selectedEdge = computed(() => {
     paramOperator: customEdge.paramOperator || 'eq',
     paramValue: customEdge.paramValue || ''
   }
+})
+
+// 当前选中边的可用优先级选项
+const availablePriorities = computed(() => {
+  if (!selectedEdge.value) return []
+  return getAvailablePriorities(
+    selectedEdge.value.source, 
+    selectedEdge.value.sourceHandle, 
+    selectedEdge.value.id
+  )
 })
 
 const isPriorityValid = computed(() => {
@@ -565,6 +573,45 @@ const calculateEdgeDepth = (sourceId: string, targetId: string): number => {
   dfs(originalSource, 0)
   
   return maxDepth
+}
+
+// 优先级相关辅助函数
+
+// 获取指定连接点已使用的优先级集合
+const getUsedPriorities = (sourceId: string, sourceHandle?: string | null, excludeEdgeId?: string): Set<number> => {
+  const outgoingEdges = edges.value.filter(e => 
+    e.source === sourceId && 
+    e.sourceHandle === sourceHandle &&
+    e.id !== excludeEdgeId
+  )
+  return new Set(outgoingEdges.map(e => e.priority ?? 10))
+}
+
+// 获取下一个可用的优先级（剩余优先级中最大的值）
+const getNextAvailablePriority = (sourceId: string, sourceHandle?: string | null): number => {
+  const usedPriorities = getUsedPriorities(sourceId, sourceHandle)
+  
+  for (let priority = 10; priority >= 0; priority--) {
+    if (!usedPriorities.has(priority)) {
+      return priority
+    }
+  }
+  
+  return -1 // 所有优先级都已被使用
+}
+
+// 获取可用的优先级选项列表
+const getAvailablePriorities = (sourceId: string, sourceHandle?: string | null, excludeEdgeId?: string): number[] => {
+  const usedPriorities = getUsedPriorities(sourceId, sourceHandle, excludeEdgeId)
+  const available: number[] = []
+  
+  for (let priority = 0; priority <= 10; priority++) {
+    if (!usedPriorities.has(priority)) {
+      available.push(priority)
+    }
+  }
+  
+  return available
 }
 
 const selectedNode = computed(() => {
@@ -1341,18 +1388,26 @@ const onConnect = (connection: Connection) => {
     return // 两个节点之间已存在连线，拒绝创建
   }
 
+  // 获取下一个可用的优先级
+  const priority = getNextAvailablePriority(connection.source, connection.sourceHandle)
+  
+  // 如果没有可用优先级，禁止创建
+  if (priority === -1) {
+    return // 该连接点的所有优先级已用完，拒绝创建
+  }
+
   const newEdge: CustomEdge = {
     id: `e${Date.now()}`,
     source: connection.source,
     target: connection.target,
     sourceHandle: connection.sourceHandle,
     targetHandle: connection.targetHandle,
-    label: '[P10]',
+    label: `[P${priority}]`,
     data: {
-      priority: 10,
-      label: '[P10]'
+      priority,
+      label: `[P${priority}]`
     },
-    priority: 10,
+    priority,
     statusCode: undefined,
     paramName: undefined,
     paramOperator: 'eq',
