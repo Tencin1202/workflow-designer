@@ -87,11 +87,11 @@
               </span>
             </div>
           </template>
-          <Background pattern-color="#cbd5e1" :gap="20" />
+          <Background variant="lines" pattern-color="#e5e5e5" :gap="40" />
           <Controls />
           <MiniMap />
         </VueFlow>
-        <div v-if="showMask" class="canvas-mask"></div>
+        <div v-if="showMask" class="canvas-mask" @click="onPaneClick"></div>
       </main>
 
       <aside class="sidebar-right" v-if="showPropertiesPanel && selectedNode">
@@ -1778,7 +1778,7 @@ const exportWorkflowToXML = () => {
   bottom: 0;
   background: rgba(0, 0, 0, 0.3);
   z-index: 10;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .edge-label {
