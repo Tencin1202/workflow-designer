@@ -61,10 +61,32 @@
 - **优先级** - 数字越小优先级越高（0-10），同一连接点的优先级不可重复
 - **statusCode 条件** - 状态值匹配
 - **参数条件** - 参数名、关系（equals/notEqual/contains/matches）、参数值，显示格式为 `param=xxx, value=yyy, operator=z`
+- **任务日志配置** - 记录工作流执行日志（可选配置）
 
 **优先级规则：**
 - 新建连线时，自动分配剩余优先级中最大的值（优先级最低）
 - 同一连接点最多 11 条出边（优先级 0-10 用完后禁止创建新连线）
+
+### 任务日志配置
+任务日志用于在工作流执行时记录每一步的日志信息。
+
+**配置说明：**
+- 点击"+ 添加任务日志"按钮展开配置区域
+- **i18n Key** - 国际化语言的 key（必填，1-64 个非空白字符）
+- **占位符** - 可添加多个，占位符名称和值成对配置
+  - 名称：如 `orderId`、`userName`
+  - 值：如 `${result.orderId}`、`${context.timestamp}`
+
+**条件网关的 taskLog 继承：**
+- **入边**（源节点 → 网关）：自动继承原连线的 taskLog 配置
+- **出边**（网关 → 目标节点）：默认无 taskLog，用户可按需添加
+
+**XML 导出格式：**
+```xml
+<edge source="n1" target="n2" priority="0" 
+      taskLog.i18nKey="task.success" 
+      taskLog.placeholders="{&quot;orderId&quot;:&quot;${result.orderId}&quot;}"/>
+```
 
 ### 导入和导出
 - **导入** - 从 XML 文件恢复已保存的工作流

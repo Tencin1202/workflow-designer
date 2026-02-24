@@ -262,6 +262,86 @@
               </div>
             </div>
           </div>
+          
+          <!-- taskLog 配置 -->
+          <div class="form-group">
+            <label>任务日志配置</label>
+            
+            <!-- 默认显示添加按钮 -->
+            <button 
+              v-if="!hasTaskLog"
+              type="button" 
+              class="add-tasklog-btn"
+              @click="addTaskLog"
+            >
+              + 添加任务日志
+            </button>
+            
+            <!-- 添加后显示配置区域 -->
+            <div v-else class="tasklog-section">
+              <!-- i18nKey + 删除按钮 -->
+              <div class="tasklog-header">
+                <div class="tasklog-header-content">
+                  <!-- i18nKey 输入 -->
+                  <div class="form-group">
+                    <label>i18n Key <span class="required">*</span></label>
+                    <input 
+                      v-model="editingTaskLog!.i18nKey"
+                      class="form-input"
+                      :class="{ 'is-error': hasStartedTypingTaskLog && !isTaskLogValid }"
+                      placeholder="例如: task.success"
+                      @input="handleTaskLogInput"
+                    />
+                    <span v-if="hasStartedTypingTaskLog && !isTaskLogValid" class="error-text">
+                      i18n Key 为 1-64 个非空白字符
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  type="button" 
+                  class="remove-tasklog-btn"
+                  @click="removeTaskLog"
+                >删除</button>
+              </div>
+              
+              <!-- 占位符配置 -->
+              <div class="form-group">
+                <label>占位符</label>
+                <div class="placeholder-list">
+                  <div 
+                    v-for="(value, key) in editingTaskLog!.placeholders" 
+                    :key="key"
+                    class="placeholder-row"
+                  >
+                    <input 
+                      :value="key"
+                      @input="updatePlaceholderKey(key, ($event.target as HTMLInputElement).value)"
+                      class="form-input placeholder-key-input"
+                      placeholder="名称，例如: orderId"
+                    />
+                    <input 
+                      v-model="editingTaskLog!.placeholders[key]"
+                      class="form-input placeholder-value-input"
+                      placeholder="值，例如: ${result.orderId}"
+                      @input="handleTaskLogInput"
+                    />
+                    <button 
+                      type="button" 
+                      class="delete-placeholder-btn"
+                      @click="removePlaceholder(key)"
+                    >×</button>
+                  </div>
+                  <button 
+                    type="button" 
+                    class="add-placeholder-btn"
+                    @click="addPlaceholder"
+                  >
+                    + 添加占位符
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
       
@@ -348,6 +428,10 @@ type CustomEdge = Edge & {
   paramName?: string
   paramOperator?: string
   paramValue?: string
+  taskLog?: {
+    i18nKey: string
+    placeholders: Record<string, string>
+  }
   branches?: Array<{
     id: string
     targetNodeId: string
@@ -463,6 +547,8 @@ const isEditingEdge = ref(false)
 const editingEdgeId = ref<string | null>(null)
 const hasStartedTypingPriority = ref(false)
 const hasStartedTypingParam = ref(false)
+const hasStartedTypingTaskLog = ref(false)
+const editingTaskLog = ref<{ i18nKey: string; placeholders: Record<string, string> } | null>(null)
 
 const selectedEdge = computed(() => {
   if (!selectedEdgeId.value) return null
@@ -478,8 +564,16 @@ const selectedEdge = computed(() => {
     statusCode: customEdge.statusCode || '',
     paramName: customEdge.paramName || '',
     paramOperator: customEdge.paramOperator || 'eq',
-    paramValue: customEdge.paramValue || ''
+    paramValue: customEdge.paramValue || '',
+    taskLog: customEdge.taskLog ? {
+      i18nKey: customEdge.taskLog.i18nKey || '',
+      placeholders: customEdge.taskLog.placeholders || {}
+    } : undefined
   }
+})
+
+const hasTaskLog = computed(() => {
+  return !!selectedEdge.value?.taskLog || !!editingTaskLog.value
 })
 
 // 当前选中边的可用优先级选项
@@ -511,9 +605,26 @@ const isParamValid = computed(() => {
   return !!paramName && paramName.length > 0
 })
 
+const isTaskLogValid = computed(() => {
+  if (!selectedEdge.value) return true
+  
+  const taskLog = selectedEdge.value.taskLog
+  if (!taskLog) return true
+  
+  const i18nKey = taskLog.i18nKey?.trim()
+  if (!i18nKey || i18nKey.length === 0 || i18nKey.length > 64) {
+    return false
+  }
+  
+  return true
+})
+
 const isEdgeValid = computed(() => {
   if (!selectedEdge.value) return false
-  return isPriorityValid.value && isParamValid.value
+  if (!isPriorityValid.value || !isParamValid.value || !isTaskLogValid.value) {
+    return false
+  }
+  return true
 })
 
 // 条件网关相关计算属性
@@ -914,6 +1025,7 @@ const clearAllEditingStates = () => {
   editingEdgeId.value = null
   showPropertiesPanel.value = false
   showMask.value = false
+  editingTaskLog.value = null
 }
 
 const closeContextMenu = () => {
@@ -1166,7 +1278,7 @@ const convertToConditionGateway = () => {
   // 添加网关节点
   addNodes([gatewayNode])
 
-  // 入边：继承原边所有条件
+  // 入边：继承原边所有条件（包括 taskLog）
   const inboundEdge: CustomEdge = {
     id: inboundEdgeId,
     source: edge.source,
@@ -1183,11 +1295,12 @@ const convertToConditionGateway = () => {
     paramName: edge.paramName,
     paramOperator: edge.paramOperator || 'eq',
     paramValue: edge.paramValue,
+    taskLog: edge.taskLog ? { ...edge.taskLog } : undefined,
     isGatewayEdge: true,
     gatewayNodeId
   }
 
-  // 出边：默认条件（P10），不继承原边条件
+  // 出边：默认条件（P10），不继承原边条件，默认无 taskLog
   const outboundEdge: CustomEdge = {
     id: outboundEdgeId,
     source: gatewayNodeId,
@@ -1197,6 +1310,7 @@ const convertToConditionGateway = () => {
     label: '[P10]',
     data: { priority: 10, label: '[P10]' },
     priority: 10,
+    taskLog: undefined,
     isGatewayEdge: true,
     gatewayNodeId
   }
@@ -1264,6 +1378,57 @@ const handlePriorityInput = () => {
   updateEdgeProperties()
 }
 
+const handleTaskLogInput = () => {
+  hasStartedTypingTaskLog.value = true
+  updateEdgeProperties()
+}
+
+const addTaskLog = () => {
+  editingTaskLog.value = {
+    i18nKey: '',
+    placeholders: {}
+  }
+  hasStartedTypingTaskLog.value = false
+}
+
+const removeTaskLog = () => {
+  editingTaskLog.value = null
+  hasStartedTypingTaskLog.value = false
+  
+  if (!selectedEdgeId.value) return
+  const edgeIndex = edges.value.findIndex((e: CustomEdge) => e.id === selectedEdgeId.value)
+  if (edgeIndex === -1) return
+  
+  const edge = edges.value[edgeIndex]
+  if (!edge) return
+  edge.taskLog = undefined
+  updateEdgeLabel(edge)
+  edges.value = [...edges.value]
+}
+
+const updatePlaceholderKey = (oldKey: string, newKey: string) => {
+  if (!editingTaskLog.value) return
+  const placeholders = editingTaskLog.value.placeholders
+  const value = placeholders[oldKey] || ''
+  delete placeholders[oldKey]
+  if (newKey.trim()) {
+    placeholders[newKey.trim()] = value
+  } else {
+    placeholders[oldKey] = value
+  }
+}
+
+const addPlaceholder = () => {
+  if (!editingTaskLog.value) return
+  const newKey = `placeholder${Object.keys(editingTaskLog.value.placeholders).length + 1}`
+  editingTaskLog.value.placeholders[newKey] = ''
+}
+
+const removePlaceholder = (key: string) => {
+  if (!editingTaskLog.value) return
+  delete editingTaskLog.value.placeholders[key]
+}
+
 // ==================== 条件网关相关方法 ====================
 
 const updateEdgeLabel = (edge: CustomEdge) => {
@@ -1312,6 +1477,23 @@ const updateEdgeProperties = () => {
         edge.paramName = undefined
         edge.paramOperator = undefined
         edge.paramValue = undefined
+      }
+
+      // 更新 taskLog 属性
+      if (editingTaskLog.value) {
+        const i18nKey = editingTaskLog.value.i18nKey?.trim()
+        const placeholders = editingTaskLog.value.placeholders
+        
+        if (i18nKey || (placeholders && Object.keys(placeholders).length > 0)) {
+          edge.taskLog = {
+            i18nKey: i18nKey || '',
+            placeholders: placeholders || {}
+          }
+        } else {
+          edge.taskLog = undefined
+        }
+      } else {
+        edge.taskLog = undefined
       }
 
       updateEdgeLabel(edge)
@@ -1467,6 +1649,20 @@ const onEdgeClick = (event: { edge: { id: string } }) => {
   }
   
   selectedEdgeId.value = event.edge.id
+  
+  // 同步 taskLog 到编辑状态
+  const edge = edges.value.find((e: Edge) => e.id === event.edge.id)
+  if (edge) {
+    const customEdge = edge as CustomEdge
+    if (customEdge.taskLog) {
+      editingTaskLog.value = {
+        i18nKey: customEdge.taskLog.i18nKey || '',
+        placeholders: { ...customEdge.taskLog.placeholders }
+      }
+    } else {
+      editingTaskLog.value = null
+    }
+  }
 }
 
 const onEdgeDoubleClick = (event: { edge: { id: string } }) => {
@@ -2127,5 +2323,111 @@ const exportWorkflowToXML = () => {
 
 .confirm-btn.primary:hover {
   background: #2563eb;
+}
+
+/* taskLog 配置区域样式 */
+.tasklog-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.placeholder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.placeholder-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.placeholder-key-input {
+  width: 120px;
+}
+
+.placeholder-value-input {
+  flex: 1;
+}
+
+.delete-placeholder-btn {
+  padding: 0.25rem 0.5rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.delete-placeholder-btn:hover {
+  background: #dc2626;
+}
+
+.add-placeholder-btn {
+  padding: 0.5rem;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.add-placeholder-btn:hover {
+  background: #059669;
+}
+
+.add-tasklog-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: #10b981;
+  color: white;
+  border: 1px solid #10b981;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.add-tasklog-btn:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+.tasklog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.tasklog-header-content {
+  flex: 1;
+}
+
+.tasklog-header .form-input {
+  flex: 1;
+}
+
+.remove-tasklog-btn {
+  padding: 0.5rem 0.75rem;
+  background: #fee2e2;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  margin-top: 1.5rem;
+}
+
+.remove-tasklog-btn:hover {
+  background: #fecaca;
 }
 </style>

@@ -3,12 +3,19 @@
 // 操作符类型
 export type ConditionOperator = 'eq' | 'ne' | 'contains' | 'regex'
 
+// taskLog 配置
+export interface TaskLogConfig {
+  i18nKey: string                      // 国际化 key（必填，1-64字符）
+  placeholders: Record<string, string>  // 占位符 key-value（可选）
+}
+
 // 条件配置
 export interface EdgeConditionConfig {
   statusCode?: string  // statusCode 条件值
   paramName?: string   // 参数名
   paramOperator?: ConditionOperator  // 关系
   paramValue?: string  // 参数值
+  taskLog?: TaskLogConfig  // 任务日志配置
 }
 
 // ==================== 节点数据接口 ====================
@@ -261,10 +268,29 @@ export const parseXML = (xmlString: string): WorkflowData => {
       const paramName = edgeEl.getAttribute('paramName') || undefined
       const paramOperator = (edgeEl.getAttribute('paramOperator') as ConditionOperator) || undefined
       const paramValue = edgeEl.getAttribute('paramValue') || undefined
-      
+
+      // 解析 taskLog
+      let taskLog: TaskLogConfig | undefined
+      const taskLogI18nKey = edgeEl.getAttribute('taskLog.i18nKey')
+      if (taskLogI18nKey) {
+        taskLog = {
+          i18nKey: taskLogI18nKey,
+          placeholders: {}
+        }
+        const placeholdersAttr = edgeEl.getAttribute('taskLog.placeholders')
+        if (placeholdersAttr) {
+          try {
+            const decoded = placeholdersAttr.replace(/&quot;/g, '"')
+            taskLog.placeholders = JSON.parse(decoded)
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+
       const conditions: EdgeConditionConfig | undefined = (
-        statusCode || paramName || paramValue
-      ) ? { statusCode, paramName, paramOperator, paramValue } : undefined
+        statusCode || paramName || paramValue || taskLog
+      ) ? { statusCode, paramName, paramOperator, paramValue, taskLog } : undefined
       
       const edgeId = `e${Date.now()}-${index}`
       
@@ -323,6 +349,17 @@ function generateConditionsXML(conditions?: EdgeConditionConfig): string {
     xml += ` paramOperator="${conditions.paramOperator || 'eq'}"`
     xml += ` paramValue="${conditions.paramValue || ''}"`
   }
+  
+  // 生成 taskLog XML
+  if (conditions.taskLog) {
+    const { i18nKey, placeholders } = conditions.taskLog
+    xml += ` taskLog.i18nKey="${i18nKey}"`
+    if (placeholders && Object.keys(placeholders).length > 0) {
+      const placeholdersJson = JSON.stringify(placeholders).replace(/"/g, '&quot;')
+      xml += ` taskLog.placeholders="${placeholdersJson}"`
+    }
+  }
+  
   return xml
 }
 
