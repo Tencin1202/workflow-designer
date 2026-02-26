@@ -72,10 +72,10 @@
 
 **配置说明：**
 - 点击"+ 添加任务日志"按钮展开配置区域
-- **i18n Key** - 国际化语言的 key（必填，1-64 个非空白字符）
-- **占位符** - 可添加多个，占位符名称和值成对配置
-  - 名称：如 `orderId`、`userName`
-  - 值：如 `${result.orderId}`、`${context.timestamp}`
+- **国际化key** - 国际化语言的 key（必填，1-64 个非空白字符）
+- **占位符** - 可添加多个，key 和 value 成对配置
+  - key：如 `orderId`、`userName`（手动输入，无默认值）
+  - value：如 `${result.orderId}`、`${context.timestamp}`
 
 **条件网关的 taskLog 继承：**
 - **入边**（源节点 → 网关）：自动继承原连线的 taskLog 配置

@@ -279,29 +279,32 @@
             
             <!-- 添加后显示配置区域 -->
             <div v-else class="tasklog-section">
-              <!-- i18nKey + 删除按钮 -->
-              <div class="tasklog-header">
-                <div class="tasklog-header-content">
-                  <!-- i18nKey 输入 -->
-                  <div class="form-group">
-                    <label>i18n Key <span class="required">*</span></label>
-                    <input 
-                      v-model="editingTaskLog!.i18nKey"
-                      class="form-input"
-                      :class="{ 'is-error': hasStartedTypingTaskLog && !isTaskLogValid }"
-                      placeholder="例如: task.success"
-                      @input="handleTaskLogInput"
-                    />
-                    <span v-if="hasStartedTypingTaskLog && !isTaskLogValid" class="error-text">
-                      i18n Key 为 1-64 个非空白字符
-                    </span>
-                  </div>
-                </div>
-                <button 
-                  type="button" 
-                  class="remove-tasklog-btn"
-                  @click="removeTaskLog"
-                >删除</button>
+              <!-- 删除按钮 - 右上角图标 -->
+              <button 
+                type="button" 
+                class="remove-tasklog-btn"
+                @click="removeTaskLog"
+                title="删除任务日志配置"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+              
+              <!-- 国际化key 输入 -->
+              <div class="form-group tasklog-i18n-group">
+                <label>国际化key <span class="required">*</span></label>
+                <input 
+                  v-model="editingTaskLog!.i18nKey"
+                  class="form-input"
+                  :class="{ 'is-error': hasStartedTypingTaskLog && !isTaskLogValid }"
+                  placeholder="例如: task.success"
+                  @input="handleTaskLogInput"
+                />
+                <span v-if="hasStartedTypingTaskLog && !isTaskLogValid" class="error-text">
+                  i18n Key 为 1-64 个非空白字符
+                </span>
               </div>
               
               <!-- 占位符配置 -->
@@ -313,16 +316,16 @@
                     :key="key"
                     class="placeholder-row"
                   >
-                    <input 
-                      :value="key"
+                    <input
+                      :value="key.startsWith('__temp_') ? '' : key"
                       @input="updatePlaceholderKey(key, ($event.target as HTMLInputElement).value)"
                       class="form-input placeholder-key-input"
-                      placeholder="名称，例如: orderId"
+                      placeholder="key，例如: orderId"
                     />
-                    <input 
+                    <input
                       v-model="editingTaskLog!.placeholders[key]"
                       class="form-input placeholder-value-input"
-                      placeholder="值，例如: ${result.orderId}"
+                      placeholder="value，例如: ${result.orderId}"
                       @input="handleTaskLogInput"
                     />
                     <button 
@@ -1411,17 +1414,23 @@ const updatePlaceholderKey = (oldKey: string, newKey: string) => {
   const placeholders = editingTaskLog.value.placeholders
   const value = placeholders[oldKey] || ''
   delete placeholders[oldKey]
-  if (newKey.trim()) {
-    placeholders[newKey.trim()] = value
+  const trimmedKey = newKey.trim()
+  if (trimmedKey) {
+    // 如果新key已存在，删除旧值
+    delete placeholders[trimmedKey]
+    placeholders[trimmedKey] = value
   } else {
-    placeholders[oldKey] = value
+    // key为空时使用临时ID
+    const tempId = `__temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    placeholders[tempId] = value
   }
 }
 
 const addPlaceholder = () => {
   if (!editingTaskLog.value) return
-  const newKey = `placeholder${Object.keys(editingTaskLog.value.placeholders).length + 1}`
-  editingTaskLog.value.placeholders[newKey] = ''
+  // 使用临时ID，key输入框为空让用户填写
+  const tempId = `__temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  editingTaskLog.value.placeholders[tempId] = ''
 }
 
 const removePlaceholder = (key: string) => {
@@ -1484,10 +1493,20 @@ const updateEdgeProperties = () => {
         const i18nKey = editingTaskLog.value.i18nKey?.trim()
         const placeholders = editingTaskLog.value.placeholders
         
-        if (i18nKey || (placeholders && Object.keys(placeholders).length > 0)) {
+        // 过滤掉临时占位符（key为空或以__temp_开头）
+        const filteredPlaceholders: Record<string, string> = {}
+        if (placeholders) {
+          Object.entries(placeholders).forEach(([key, value]) => {
+            if (key && !key.startsWith('__temp_') && key.trim()) {
+              filteredPlaceholders[key] = value
+            }
+          })
+        }
+        
+        if (i18nKey || Object.keys(filteredPlaceholders).length > 0) {
           edge.taskLog = {
             i18nKey: i18nKey || '',
-            placeholders: placeholders || {}
+            placeholders: filteredPlaceholders
           }
         } else {
           edge.taskLog = undefined
@@ -1900,7 +1919,7 @@ const exportWorkflowToXML = () => {
 }
 
 .sidebar-right {
-  width: 280px;
+  width: 350px;
   background: white;
   border-left: 1px solid #e2e8f0;
   padding: 1rem;
@@ -2347,11 +2366,14 @@ const exportWorkflowToXML = () => {
 }
 
 .placeholder-key-input {
-  width: 120px;
+  width: 100px;
+  flex-shrink: 0;
 }
 
 .placeholder-value-input {
   flex: 1;
+  min-width: 0;
+  max-width: calc(100% - 120px);
 }
 
 .delete-placeholder-btn {
@@ -2401,33 +2423,42 @@ const exportWorkflowToXML = () => {
   border-color: #059669;
 }
 
-.tasklog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+.tasklog-section {
+  position: relative;
+  padding: 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
 }
 
-.tasklog-header-content {
-  flex: 1;
-}
-
-.tasklog-header .form-input {
-  flex: 1;
+.tasklog-i18n-group {
+  margin-bottom: 1rem;
 }
 
 .remove-tasklog-btn {
-  padding: 0.5rem 0.75rem;
-  background: #fee2e2;
-  color: #ef4444;
-  border: 1px solid #fecaca;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.375rem;
+  background: transparent;
+  color: #94a3b8;
+  border: none;
   border-radius: 0.375rem;
   cursor: pointer;
-  font-size: 0.75rem;
-  white-space: nowrap;
-  margin-top: 1.5rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .remove-tasklog-btn:hover {
-  background: #fecaca;
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.remove-tasklog-btn svg {
+  width: 16px;
+  height: 16px;
 }
 </style>

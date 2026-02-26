@@ -354,8 +354,17 @@ function generateConditionsXML(conditions?: EdgeConditionConfig): string {
   if (conditions.taskLog) {
     const { i18nKey, placeholders } = conditions.taskLog
     xml += ` taskLog.i18nKey="${i18nKey}"`
-    if (placeholders && Object.keys(placeholders).length > 0) {
-      const placeholdersJson = JSON.stringify(placeholders).replace(/"/g, '&quot;')
+    // 过滤掉空key或临时key
+    const validPlaceholders: Record<string, string> = {}
+    if (placeholders) {
+      Object.entries(placeholders).forEach(([key, value]) => {
+        if (key && key.trim() && !key.startsWith('__temp_')) {
+          validPlaceholders[key] = value
+        }
+      })
+    }
+    if (Object.keys(validPlaceholders).length > 0) {
+      const placeholdersJson = JSON.stringify(validPlaceholders).replace(/"/g, '&quot;')
       xml += ` taskLog.placeholders="${placeholdersJson}"`
     }
   }
