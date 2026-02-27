@@ -15,6 +15,28 @@
 - **接口调用** - 调用外部 API
 - **接口循环调用** - 循环调用 API 处理集合数据
 
+### 节点 Handler 配置
+为每个节点配置请求和响应处理逻辑。
+
+**配置说明：**
+- 点击"+ 添加 Request Handler"或"+ 添加 Response Handler"按钮展开配置区域
+- **class** - 处理器的类名（必填，1-64 个非空白字符）
+- **method** - 处理器的方法名（必填，1-64 个非空白字符）
+
+**校验规则：**
+- Request Handler 和 Response Handler 必须同时配置或同时不配置
+- class 和 method 均为必填项
+
+**XML 导出格式：**
+```xml
+<node id="n1" type="subprocess" label="开始">
+  <requestHandler class="com.example.Handler" method="handleRequest"/>
+  <responseHandler class="com.example.Handler" method="handleResponse"/>
+</node>
+```
+
+**注意：** 条件网关节点不支持 Handler 配置。
+
 ### 连接节点
 - 从一个节点的连接点拖拽到另一个节点创建连线
 - 连线上的标签显示优先级和条件 `[P优先级,条件]`
@@ -62,6 +84,7 @@
 - **statusCode 条件** - 状态值匹配
 - **参数条件** - 参数名、关系（equals/notEqual/contains/matches）、参数值，显示格式为 `param=xxx, value=yyy, operator=z`
 - **任务日志配置** - 记录工作流执行日志（可选配置）
+- **全局参数** - 流程全局参数处理（可选配置）
 
 **优先级规则：**
 - 新建连线时，自动分配剩余优先级中最大的值（优先级最低）
@@ -86,6 +109,45 @@
 <edge source="n1" target="n2" priority="0" 
       taskLog.i18nKey="task.success" 
       taskLog.placeholders="{&quot;orderId&quot;:&quot;${result.orderId}&quot;}"/>
+```
+
+**连线上显示：**
+- 任务日志配置会在连线上显示，与条件配置分行显示
+- 显示格式：`log[i18n:task.success,orderId=${result.orderId}]`
+
+### 全局参数配置
+全局参数用于在工作流执行时向后续节点传递参数。
+
+**配置说明：**
+- 点击"+ 添加全局参数"按钮展开配置区域
+- **添加到全局参数** - 将参数添加到全局上下文
+  - key：参数名称（必填）
+  - value：参数值（可为空，代表空字符串）
+- **从全局参数移除** - 从全局上下文中移除参数
+  - key：参数名称（必填）
+
+**校验规则：**
+- key 不允许为空
+- value 可以为空（代表空字符串）
+- 添加和移除操作可以同时存在
+
+**XML 导出格式：**
+```xml
+<edge source="n1" target="n2" priority="0">
+  <param addToGlobal="param1" value="value1"/>
+  <param addToGlobal="param2" value=""/>
+  <param removeFromGlobal="paramToRemove"/>
+</edge>
+```
+
+**连线上显示：**
+- 添加操作显示为 `+key=value`
+- 移除操作显示为 `-key`
+- 显示格式：`global[+param1=value1,+param2=, -paramToRemove]`
+
+**完整连线标签示例：**
+```
+[P0, statusCode=200, log[i18n:task.success,orderId=${result.orderId}], global[+param1=value1,+param2=, -paramToRemove]]
 ```
 
 ### 导入和导出

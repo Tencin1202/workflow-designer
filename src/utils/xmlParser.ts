@@ -9,6 +9,13 @@ export interface TaskLogConfig {
   placeholders: Record<string, string>  // 占位符 key-value（可选）
 }
 
+// 全局参数操作
+export interface GlobalParamAction {
+  type: 'add' | 'remove'
+  key: string
+  value?: string
+}
+
 // 条件配置
 export interface EdgeConditionConfig {
   statusCode?: string  // statusCode 条件值
@@ -16,9 +23,15 @@ export interface EdgeConditionConfig {
   paramOperator?: ConditionOperator  // 关系
   paramValue?: string  // 参数值
   taskLog?: TaskLogConfig  // 任务日志配置
+  globalParams?: GlobalParamAction[]  // 全局参数操作列表
 }
 
 // ==================== 节点数据接口 ====================
+
+export interface HandlerConfig {
+  class: string
+  method: string
+}
 
 export interface NodeData {
   id: string
@@ -28,6 +41,8 @@ export interface NodeData {
   processor?: string
   interfaceName?: string
   collectionName?: string
+  requestHandler?: HandlerConfig
+  responseHandler?: HandlerConfig
   // 条件网关专用
   isConditionGateway?: boolean
   gatewayConditions?: EdgeConditionConfig
@@ -228,6 +243,28 @@ export const parseXML = (xmlString: string): WorkflowData => {
     const interfaceNameEl = nodeEl.querySelector('interfaceName')
     const collectionNameEl = nodeEl.querySelector('collectionName')
     
+    const requestHandlerEl = nodeEl.querySelector('requestHandler')
+    const responseHandlerEl = nodeEl.querySelector('responseHandler')
+    
+    let requestHandler: HandlerConfig | undefined
+    let responseHandler: HandlerConfig | undefined
+    
+    if (requestHandlerEl) {
+      const rhClass = requestHandlerEl.getAttribute('class')
+      const rhMethod = requestHandlerEl.getAttribute('method')
+      if (rhClass && rhMethod) {
+        requestHandler = { class: rhClass, method: rhMethod }
+      }
+    }
+    
+    if (responseHandlerEl) {
+      const rhClass = responseHandlerEl.getAttribute('class')
+      const rhMethod = responseHandlerEl.getAttribute('method')
+      if (rhClass && rhMethod) {
+        responseHandler = { class: rhClass, method: rhMethod }
+      }
+    }
+    
     nodes.push({
       id,
       type,
@@ -236,6 +273,8 @@ export const parseXML = (xmlString: string): WorkflowData => {
       processor: processorEl?.textContent?.trim() || undefined,
       interfaceName: interfaceNameEl?.textContent?.trim() || undefined,
       collectionName: collectionNameEl?.textContent?.trim() || undefined,
+      requestHandler,
+      responseHandler,
       isConditionGateway: isGateway,
       gatewayConditions
     })
@@ -288,9 +327,30 @@ export const parseXML = (xmlString: string): WorkflowData => {
         }
       }
 
+      // 解析全局参数
+      const globalParams: GlobalParamAction[] = []
+      const globalParamsElements = edgeEl.querySelectorAll('param')
+      globalParamsElements.forEach(paramEl => {
+        const addToGlobal = paramEl.getAttribute('addToGlobal')
+        const removeFromGlobal = paramEl.getAttribute('removeFromGlobal')
+        
+        if (addToGlobal) {
+          globalParams.push({
+            type: 'add',
+            key: addToGlobal,
+            value: paramEl.getAttribute('value') || ''
+          })
+        } else if (removeFromGlobal) {
+          globalParams.push({
+            type: 'remove',
+            key: removeFromGlobal
+          })
+        }
+      })
+
       const conditions: EdgeConditionConfig | undefined = (
-        statusCode || paramName || paramValue || taskLog
-      ) ? { statusCode, paramName, paramOperator, paramValue, taskLog } : undefined
+        statusCode || paramName || paramValue || taskLog || globalParams.length > 0
+      ) ? { statusCode, paramName, paramOperator, paramValue, taskLog, globalParams: globalParams.length > 0 ? globalParams : undefined } : undefined
       
       const edgeId = `e${Date.now()}-${index}`
       
@@ -369,6 +429,20 @@ function generateConditionsXML(conditions?: EdgeConditionConfig): string {
     }
   }
   
+  // 生成全局参数 XML
+  if (conditions.globalParams && conditions.globalParams.length > 0) {
+    conditions.globalParams.forEach(param => {
+      if (param.type === 'add' && param.key.trim()) {
+        xml += `\n        <param addToGlobal="${param.key}" value="${param.value || ''}"/>`
+      } else if (param.type === 'remove' && param.key.trim()) {
+        xml += `\n        <param removeFromGlobal="${param.key}"/>`
+      }
+    })
+    if (conditions.globalParams.some(p => p.type === 'add' || p.type === 'remove')) {
+      xml += '\n      '
+    }
+  }
+  
   return xml
 }
 
@@ -412,6 +486,13 @@ export const generateXML = (data: WorkflowData): string => {
     }
     if (node.collectionName) {
       xml += `      <collectionName>${node.collectionName}</collectionName>\n`
+    }
+    
+    if (node.requestHandler) {
+      xml += `      <requestHandler class="${node.requestHandler.class}" method="${node.requestHandler.method}"/>\n`
+    }
+    if (node.responseHandler) {
+      xml += `      <responseHandler class="${node.responseHandler.class}" method="${node.responseHandler.method}"/>\n`
     }
     
     if (node.isConditionGateway && node.gatewayConditions) {

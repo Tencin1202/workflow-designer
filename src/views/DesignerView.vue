@@ -155,6 +155,112 @@
             </span>
           </div>
           
+          <!-- Request Handler 配置 -->
+          <div class="form-group">
+            <label>Request Handler</label>
+            
+            <button 
+              v-if="!hasRequestHandler"
+              type="button" 
+              class="add-tasklog-btn"
+              @click="addRequestHandler"
+            >
+              + 添加 Request Handler
+            </button>
+            
+            <div v-else class="tasklog-section">
+              <button 
+                type="button" 
+                class="remove-tasklog-btn"
+                @click="removeRequestHandler"
+                title="删除 Request Handler"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+              
+              <div class="form-group tasklog-i18n-group">
+                <label>class <span class="required">*</span></label>
+                <input 
+                  :value="selectedNode.requestHandler?.class"
+                  class="form-input"
+                  :class="{ 'is-error': hasStartedTypingRequestHandler && !isRequestHandlerValid }"
+                  placeholder="例如: com.example.Handler"
+                  @input="handleRequestHandlerClassInput"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label>method <span class="required">*</span></label>
+                <input 
+                  :value="selectedNode.requestHandler?.method"
+                  class="form-input"
+                  :class="{ 'is-error': hasStartedTypingRequestHandler && !isRequestHandlerValid }"
+                  placeholder="例如: handleRequest"
+                  @input="handleRequestHandlerMethodInput"
+                />
+                <span v-if="hasStartedTypingRequestHandler && !isRequestHandlerValid" class="error-text">
+                  class 和 method 均为 1-64 个非空白字符
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Response Handler 配置 -->
+          <div class="form-group">
+            <label>Response Handler</label>
+            
+            <button 
+              v-if="!hasResponseHandler"
+              type="button" 
+              class="add-tasklog-btn"
+              @click="addResponseHandler"
+            >
+              + 添加 Response Handler
+            </button>
+            
+            <div v-else class="tasklog-section">
+              <button 
+                type="button" 
+                class="remove-tasklog-btn"
+                @click="removeResponseHandler"
+                title="删除 Response Handler"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+              
+              <div class="form-group tasklog-i18n-group">
+                <label>class <span class="required">*</span></label>
+                <input 
+                  :value="selectedNode.responseHandler?.class"
+                  class="form-input"
+                  :class="{ 'is-error': hasStartedTypingResponseHandler && !isResponseHandlerValid }"
+                  placeholder="例如: com.example.Handler"
+                  @input="handleResponseHandlerClassInput"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label>method <span class="required">*</span></label>
+                <input 
+                  :value="selectedNode.responseHandler?.method"
+                  class="form-input"
+                  :class="{ 'is-error': hasStartedTypingResponseHandler && !isResponseHandlerValid }"
+                  placeholder="例如: handleResponse"
+                  @input="handleResponseHandlerMethodInput"
+                />
+                <span v-if="hasStartedTypingResponseHandler && !isResponseHandlerValid" class="error-text">
+                  class 和 method 均为 1-64 个非空白字符
+                </span>
+              </div>
+            </div>
+          </div>
+          
           <!-- 节点类型（不可修改） -->
           <div class="form-group">
             <label>节点类型</label>
@@ -345,6 +451,99 @@
               </div>
             </div>
           </div>
+          
+          <!-- 全局参数配置 -->
+          <div class="form-group">
+            <label>全局参数</label>
+            
+            <button 
+              v-if="!hasGlobalParams"
+              type="button" 
+              class="add-tasklog-btn"
+              @click="addGlobalParam"
+            >
+              + 添加全局参数
+            </button>
+            
+            <div v-else class="tasklog-section">
+              <button 
+                type="button" 
+                class="remove-tasklog-btn"
+                @click="removeGlobalParam"
+                title="删除全局参数"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+              
+              <!-- 添加操作列表 -->
+              <div class="param-section-title">添加到全局参数</div>
+              <div class="placeholder-list">
+                <div 
+                  v-for="(param, index) in editingEdgeGlobalAddParams!" 
+                  :key="'add-' + index"
+                  class="placeholder-row"
+                >
+                  <input
+                    :value="param.key"
+                    @input="updateGlobalAddParamKey(index, ($event.target as HTMLInputElement).value)"
+                    class="form-input placeholder-key-input"
+                    placeholder="key"
+                  />
+                  <input
+                    :value="param.value"
+                    @input="updateGlobalAddParamValue(index, ($event.target as HTMLInputElement).value); handleGlobalParamsInput()"
+                    class="form-input placeholder-value-input"
+                    placeholder="value"
+                  />
+                  <button 
+                    type="button" 
+                    class="delete-placeholder-btn"
+                    @click="removeGlobalAddParam(index)"
+                  >×</button>
+                </div>
+                <button 
+                  type="button" 
+                  class="add-placeholder-btn"
+                  @click="addGlobalAddParamRow"
+                >
+                  + 添加参数
+                </button>
+              </div>
+              
+              <!-- 移除操作列表 -->
+              <div class="param-section-title" style="margin-top: 12px;">从全局参数移除</div>
+              <div class="placeholder-list">
+                <div 
+                  v-for="(param, index) in editingEdgeGlobalRemoveParams!" 
+                  :key="'remove-' + index"
+                  class="placeholder-row"
+                >
+                  <input
+                    :value="param.key"
+                    @input="updateGlobalRemoveParamKey(index, ($event.target as HTMLInputElement).value)"
+                    class="form-input placeholder-key-input"
+                    placeholder="key"
+                    style="flex: 1;"
+                  />
+                  <button 
+                    type="button" 
+                    class="delete-placeholder-btn"
+                    @click="removeGlobalRemoveParam(index)"
+                  >×</button>
+                </div>
+                <button 
+                  type="button" 
+                  class="add-placeholder-btn"
+                  @click="addGlobalRemoveParamRow"
+                >
+                  + 添加移除参数
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
       
@@ -420,7 +619,7 @@ import ConditionGatewayNode from '@/components/ConditionGatewayNode.vue'
 import { useWorkflowStore } from '@/stores/workflow'
 import type { WorkflowData, EdgeConditionConfig, ConditionBranch, ConditionOperator } from '@/utils/xmlParser'
 import { generateXML, getOperatorText } from '@/utils/xmlParser'
-import type { Node, Edge, MarkerType, ConnectionLineType, Connection } from '@vue-flow/core'
+import type { Node, Edge, MarkerType, ConnectionLineType, Connection, NodeMouseEvent, EdgeMouseEvent } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 
@@ -435,6 +634,11 @@ type CustomEdge = Edge & {
     i18nKey: string
     placeholders: Record<string, string>
   }
+  globalParams?: Array<{
+    type: 'add' | 'remove'
+    key: string
+    value?: string
+  }>
   branches?: Array<{
     id: string
     targetNodeId: string
@@ -478,8 +682,12 @@ const hasStartedTyping = ref(false)
 const hasStartedTypingProcessor = ref(false)
 const hasStartedTypingInterface = ref(false)
 const hasStartedTypingCollection = ref(false)
+const hasStartedTypingRequestHandler = ref(false)
+const hasStartedTypingResponseHandler = ref(false)
 const isEditingProperties = ref(false)
 const editingNodeId = ref<string | null>(null)
+const editingRequestHandler = ref<{ class: string; method: string } | null>(null)
+const editingResponseHandler = ref<{ class: string; method: string } | null>(null)
 
 const contextMenu = ref({
   visible: false,
@@ -534,6 +742,25 @@ const isCollectionValid = computed(() => {
   return validateField(selectedNode.value?.collectionName)
 })
 
+const isRequestHandlerValid = computed(() => {
+  const handler = selectedNode.value?.requestHandler
+  if (!handler) return true
+  return validateField(handler.class) && validateField(handler.method)
+})
+
+const isResponseHandlerValid = computed(() => {
+  const handler = selectedNode.value?.responseHandler
+  if (!handler) return true
+  return validateField(handler.class) && validateField(handler.method)
+})
+
+const isHandlerPairValid = computed(() => {
+  const hasRequest = !!selectedNode.value?.requestHandler
+  const hasResponse = !!selectedNode.value?.responseHandler
+  if (hasRequest !== hasResponse) return false
+  return true
+})
+
 const areAllRequiredFieldsValid = computed(() => {
   if (!selectedNode.value) return false
   if (!isLabelValid.value) return false
@@ -541,6 +768,9 @@ const areAllRequiredFieldsValid = computed(() => {
   if (nodeType === 'subprocess' && !isProcessorValid.value) return false
   if ((nodeType === 'api' || nodeType === 'api-loop') && !isInterfaceValid.value) return false
   if (nodeType === 'api-loop' && !isCollectionValid.value) return false
+  if (!isHandlerPairValid.value) return false
+  if (selectedNode.value.requestHandler && !isRequestHandlerValid.value) return false
+  if (selectedNode.value.responseHandler && !isResponseHandlerValid.value) return false
   return true
 })
 
@@ -551,7 +781,10 @@ const editingEdgeId = ref<string | null>(null)
 const hasStartedTypingPriority = ref(false)
 const hasStartedTypingParam = ref(false)
 const hasStartedTypingTaskLog = ref(false)
+const hasStartedTypingGlobalParams = ref(false)
 const editingTaskLog = ref<{ i18nKey: string; placeholders: Record<string, string> } | null>(null)
+const editingEdgeGlobalAddParams = ref<Array<{ key: string; value: string }>>([])
+const editingEdgeGlobalRemoveParams = ref<Array<{ key: string }>>([])
 
 const selectedEdge = computed(() => {
   if (!selectedEdgeId.value) return null
@@ -571,12 +804,30 @@ const selectedEdge = computed(() => {
     taskLog: customEdge.taskLog ? {
       i18nKey: customEdge.taskLog.i18nKey || '',
       placeholders: customEdge.taskLog.placeholders || {}
-    } : undefined
+    } : undefined,
+    globalParams: customEdge.globalParams ? [...customEdge.globalParams] : undefined
   }
+})
+
+const hasRequestHandler = computed(() => {
+  return !!selectedNode.value?.requestHandler
+})
+
+const hasResponseHandler = computed(() => {
+  return !!selectedNode.value?.responseHandler
 })
 
 const hasTaskLog = computed(() => {
   return !!selectedEdge.value?.taskLog || !!editingTaskLog.value
+})
+
+const hasGlobalParams = computed(() => {
+  const hasAddParams = editingEdgeGlobalAddParams.value !== undefined
+  const hasRemoveParams = editingEdgeGlobalRemoveParams.value !== undefined
+  if (hasAddParams || hasRemoveParams) return true
+  
+  const params = selectedEdge.value?.globalParams
+  return !!(params && params.length > 0)
 })
 
 // 当前选中边的可用优先级选项
@@ -738,7 +989,9 @@ const selectedNode = computed(() => {
     label: node.data?.label,
     processor: node.data?.processor || '',
     interfaceName: node.data?.interfaceName || '',
-    collectionName: node.data?.collectionName || ''
+    collectionName: node.data?.collectionName || '',
+    requestHandler: node.data?.requestHandler || null,
+    responseHandler: node.data?.responseHandler || null
   }
 })
 
@@ -804,6 +1057,8 @@ const loadImportedWorkflow = (data: WorkflowData) => {
         processor: node.processor || '',
         interfaceName: node.interfaceName || '',
         collectionName: node.collectionName || '',
+        requestHandler: node.requestHandler || undefined,
+        responseHandler: node.responseHandler || undefined,
         isConditionGateway: isGateway,
         gatewayConditions: node.gatewayConditions
       }
@@ -831,6 +1086,44 @@ const loadImportedWorkflow = (data: WorkflowData) => {
       parts.push(`param=${paramName}, value=${paramValue}, operator=${getOperatorText(paramOperator)}`)
     }
     
+    // 获取 taskLog 和 globalParams
+    const taskLog = conditions?.taskLog
+    const globalParams = conditions?.globalParams
+    
+    // 任务日志显示
+    if (taskLog?.i18nKey) {
+      const logs: string[] = [`i18n:${taskLog.i18nKey}`]
+      if (taskLog.placeholders) {
+        Object.keys(taskLog.placeholders).forEach(key => {
+          logs.push(`${key}=${taskLog.placeholders[key]}`)
+        })
+      }
+      parts.push(`log[${logs.join(',')}]`)
+    }
+    
+    // 全局参数显示
+    if (globalParams && globalParams.length > 0) {
+      const addParams: string[] = []
+      const removeParams: string[] = []
+      globalParams.forEach(param => {
+        if (param.type === 'add' && param.key.trim()) {
+          addParams.push(`${param.key}=${param.value || ''}`)
+        } else if (param.type === 'remove' && param.key.trim()) {
+          removeParams.push(param.key)
+        }
+      })
+      const globalParts: string[] = []
+      if (addParams.length > 0) {
+        globalParts.push(`+${addParams.join(',+')}`)
+      }
+      if (removeParams.length > 0) {
+        globalParts.push(`-${removeParams.join(',-')}`)
+      }
+      if (globalParts.length > 0) {
+        parts.push(`global[${globalParts.join(',')}]`)
+      }
+    }
+    
     return {
       id: edge.id,
       source: edge.source,
@@ -841,6 +1134,13 @@ const loadImportedWorkflow = (data: WorkflowData) => {
       paramName: paramName || '',
       paramOperator: paramOperator,
       paramValue: paramValue || '',
+      // taskLog 数据
+      taskLog: taskLog ? {
+        i18nKey: taskLog.i18nKey || '',
+        placeholders: taskLog.placeholders || {}
+      } : undefined,
+      // 全局参数
+      globalParams: globalParams || undefined,
       // 分支数据
       branches: edge.branches?.map(branch => ({
         id: branch.id,
@@ -945,6 +1245,10 @@ const onDrop = (event: DragEvent) => {
   hasStartedTypingProcessor.value = false
   hasStartedTypingInterface.value = false
   hasStartedTypingCollection.value = false
+  hasStartedTypingRequestHandler.value = false
+  hasStartedTypingResponseHandler.value = false
+  editingRequestHandler.value = null
+  editingResponseHandler.value = null
   focusNameInput()
 }
 
@@ -979,6 +1283,9 @@ const onNodeClick = (event: { node: { id: string } }) => {
     hasStartedTypingProcessor.value = false
     hasStartedTypingInterface.value = false
     hasStartedTypingCollection.value = false
+    hasStartedTypingRequestHandler.value = false
+    hasStartedTypingResponseHandler.value = false
+    
     showMask.value = true
     isFirstCreation.value = false
   }
@@ -1029,6 +1336,10 @@ const clearAllEditingStates = () => {
   showPropertiesPanel.value = false
   showMask.value = false
   editingTaskLog.value = null
+  editingRequestHandler.value = null
+  editingResponseHandler.value = null
+  editingEdgeGlobalAddParams.value = []
+  editingEdgeGlobalRemoveParams.value = []
 }
 
 const closeContextMenu = () => {
@@ -1438,6 +1749,155 @@ const removePlaceholder = (key: string) => {
   delete editingTaskLog.value.placeholders[key]
 }
 
+// ==================== 全局参数相关方法 ====================
+
+const addGlobalParam = () => {
+  editingEdgeGlobalAddParams.value = []
+  editingEdgeGlobalRemoveParams.value = []
+  hasStartedTypingGlobalParams.value = false
+}
+
+const addGlobalAddParamRow = () => {
+  editingEdgeGlobalAddParams.value.push({ key: '', value: '' })
+}
+
+const addGlobalRemoveParamRow = () => {
+  editingEdgeGlobalRemoveParams.value.push({ key: '' })
+}
+
+const removeGlobalAddParam = (index: number) => {
+  editingEdgeGlobalAddParams.value.splice(index, 1)
+}
+
+const removeGlobalRemoveParam = (index: number) => {
+  editingEdgeGlobalRemoveParams.value.splice(index, 1)
+}
+
+const updateGlobalAddParamKey = (index: number, newKey: string) => {
+  if (editingEdgeGlobalAddParams.value[index]) {
+    editingEdgeGlobalAddParams.value[index].key = newKey
+  }
+}
+
+const updateGlobalAddParamValue = (index: number, newValue: string) => {
+  if (editingEdgeGlobalAddParams.value[index]) {
+    editingEdgeGlobalAddParams.value[index].value = newValue
+  }
+}
+
+const updateGlobalRemoveParamKey = (index: number, newKey: string) => {
+  if (editingEdgeGlobalRemoveParams.value[index]) {
+    editingEdgeGlobalRemoveParams.value[index].key = newKey
+  }
+}
+
+const removeGlobalParam = () => {
+  editingEdgeGlobalAddParams.value = editingEdgeGlobalAddParams.value || []
+  editingEdgeGlobalRemoveParams.value = editingEdgeGlobalRemoveParams.value || []
+  hasStartedTypingGlobalParams.value = false
+  
+  if (!selectedEdgeId.value) return
+  const edgeIndex = edges.value.findIndex((e: CustomEdge) => e.id === selectedEdgeId.value)
+  if (edgeIndex === -1) return
+  
+  const edge = edges.value[edgeIndex]
+  if (!edge) return
+  edge.globalParams = undefined
+  updateEdgeLabel(edge)
+  edges.value = [...edges.value]
+}
+
+const handleGlobalParamsInput = () => {
+  hasStartedTypingGlobalParams.value = true
+  updateEdgeProperties()
+}
+
+// ==================== Request Handler 相关方法 ====================
+
+const addRequestHandler = () => {
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  node.data.requestHandler = { class: '', method: '' }
+  hasStartedTypingRequestHandler.value = false
+}
+
+const removeRequestHandler = () => {
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  node.data.requestHandler = undefined
+  node.data.responseHandler = undefined
+  hasStartedTypingRequestHandler.value = false
+}
+
+const handleRequestHandlerClassInput = (event: Event) => {
+  hasStartedTypingRequestHandler.value = true
+  const value = (event.target as HTMLInputElement).value
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  if (!node.data.requestHandler) {
+    node.data.requestHandler = { class: '', method: '' }
+  }
+  node.data.requestHandler.class = value
+}
+
+const handleRequestHandlerMethodInput = (event: Event) => {
+  hasStartedTypingRequestHandler.value = true
+  const value = (event.target as HTMLInputElement).value
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  if (!node.data.requestHandler) {
+    node.data.requestHandler = { class: '', method: '' }
+  }
+  node.data.requestHandler.method = value
+}
+
+// ==================== Response Handler 相关方法 ====================
+
+const addResponseHandler = () => {
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  node.data.responseHandler = { class: '', method: '' }
+  hasStartedTypingResponseHandler.value = false
+}
+
+const removeResponseHandler = () => {
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  node.data.requestHandler = undefined
+  node.data.responseHandler = undefined
+  hasStartedTypingResponseHandler.value = false
+}
+
+const handleResponseHandlerClassInput = (event: Event) => {
+  hasStartedTypingResponseHandler.value = true
+  const value = (event.target as HTMLInputElement).value
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  if (!node.data.responseHandler) {
+    node.data.responseHandler = { class: '', method: '' }
+  }
+  node.data.responseHandler.class = value
+}
+
+const handleResponseHandlerMethodInput = (event: Event) => {
+  hasStartedTypingResponseHandler.value = true
+  const value = (event.target as HTMLInputElement).value
+  if (!selectedNodeId.value) return
+  const node = findNode(selectedNodeId.value)
+  if (!node) return
+  if (!node.data.responseHandler) {
+    node.data.responseHandler = { class: '', method: '' }
+  }
+  node.data.responseHandler.method = value
+}
+
 // ==================== 条件网关相关方法 ====================
 
 const updateEdgeLabel = (edge: CustomEdge) => {
@@ -1452,6 +1912,40 @@ const updateEdgeLabel = (edge: CustomEdge) => {
   // 参数条件
   if (edge.paramName && edge.paramValue) {
     parts.push(`param=${edge.paramName}, value=${edge.paramValue}, operator=${getOperatorText(edge.paramOperator)}`)
+  }
+  
+  // 任务日志显示
+  if (edge.taskLog?.i18nKey) {
+    const logs: string[] = [`i18n:${edge.taskLog.i18nKey}`]
+    if (edge.taskLog.placeholders) {
+      Object.keys(edge.taskLog.placeholders).forEach(key => {
+        logs.push(`${key}=${edge.taskLog!.placeholders[key]}`)
+      })
+    }
+    parts.push(`log[${logs.join(',')}]`)
+  }
+  
+  // 全局参数显示
+  if (edge.globalParams && edge.globalParams.length > 0) {
+    const addParams: string[] = []
+    const removeParams: string[] = []
+    edge.globalParams.forEach(param => {
+      if (param.type === 'add' && param.key.trim()) {
+        addParams.push(`${param.key}=${param.value || ''}`)
+      } else if (param.type === 'remove' && param.key.trim()) {
+        removeParams.push(param.key)
+      }
+    })
+    const globalParts: string[] = []
+    if (addParams.length > 0) {
+      globalParts.push(`+${addParams.join(',+')}`)
+    }
+    if (removeParams.length > 0) {
+      globalParts.push(`-${removeParams.join(',-')}`)
+    }
+    if (globalParts.length > 0) {
+      parts.push(`global[${globalParts.join(',')}]`)
+    }
   }
   
   edge.label = `[${parts.join(', ')}]`
@@ -1513,6 +2007,36 @@ const updateEdgeProperties = () => {
         }
       } else {
         edge.taskLog = undefined
+      }
+
+      // 更新全局参数属性
+      const globalParams: Array<{ type: 'add' | 'remove'; key: string; value?: string }> = []
+      
+      // 添加操作
+      editingEdgeGlobalAddParams.value.forEach(param => {
+        if (param.key.trim()) {
+          globalParams.push({
+            type: 'add',
+            key: param.key.trim(),
+            value: param.value !== undefined ? param.value : ''
+          })
+        }
+      })
+      
+      // 移除操作
+      editingEdgeGlobalRemoveParams.value.forEach(param => {
+        if (param.key.trim()) {
+          globalParams.push({
+            type: 'remove',
+            key: param.key.trim()
+          })
+        }
+      })
+      
+      if (globalParams.length > 0) {
+        edge.globalParams = globalParams
+      } else {
+        edge.globalParams = undefined
       }
 
       updateEdgeLabel(edge)
@@ -1681,6 +2205,21 @@ const onEdgeClick = (event: { edge: { id: string } }) => {
     } else {
       editingTaskLog.value = null
     }
+    
+    // 同步全局参数到编辑状态
+    const addParams: Array<{ key: string; value: string }> = []
+    const removeParams: Array<{ key: string }> = []
+    if (customEdge.globalParams) {
+      customEdge.globalParams.forEach(param => {
+        if (param.type === 'add') {
+          addParams.push({ key: param.key, value: param.value || '' })
+        } else if (param.type === 'remove') {
+          removeParams.push({ key: param.key })
+        }
+      })
+    }
+    editingEdgeGlobalAddParams.value = addParams
+    editingEdgeGlobalRemoveParams.value = removeParams
   }
 }
 
@@ -1737,32 +2276,34 @@ const onEdgeDoubleClick = (event: { edge: { id: string } }) => {
    }
 }
 
-const onEdgeContextMenu = (event: any) => {
+const onEdgeContextMenu = (event: EdgeMouseEvent) => {
   // 遮罩状态下禁用所有操作
   if (showMask.value) return
 
-  event.event?.preventDefault()
+  const mouseEvent = event.event as MouseEvent | undefined
+  mouseEvent?.preventDefault()
 
   contextMenu.value = {
     visible: true,
-    x: event.event?.clientX || 0,
-    y: event.event?.clientY || 0,
+    x: mouseEvent?.clientX || 0,
+    y: mouseEvent?.clientY || 0,
     type: 'edge',
     edgeId: event.edge?.id || null,
     nodeId: null
   }
 }
 
-const onNodeContextMenu = (event: any) => {
+const onNodeContextMenu = (event: NodeMouseEvent) => {
   // 遮罩状态下禁用所有操作
   if (showMask.value) return
 
-  event.event?.preventDefault()
+  const mouseEvent = event.event as MouseEvent | undefined
+  mouseEvent?.preventDefault()
 
   contextMenu.value = {
     visible: true,
-    x: event.event?.clientX || 0,
-    y: event.event?.clientY || 0,
+    x: mouseEvent?.clientX || 0,
+    y: mouseEvent?.clientY || 0,
     type: 'node',
     edgeId: null,
     nodeId: event.node?.id || null
@@ -1802,11 +2343,49 @@ const exportWorkflowToXML = () => {
     })),
     edges: edges.value.map((edge, index) => {
       const customEdge = edge as CustomEdge
-      const conditions: EdgeConditionConfig | undefined = customEdge.statusCode || customEdge.paramName ? {
+      
+      let taskLogConfig
+      if (customEdge.taskLog) {
+        const validPlaceholders: Record<string, string> = {}
+        if (customEdge.taskLog.placeholders) {
+          Object.entries(customEdge.taskLog.placeholders).forEach(([key, value]) => {
+            if (key && key.trim() && !key.startsWith('__temp_')) {
+              validPlaceholders[key] = value
+            }
+          })
+        }
+        if (customEdge.taskLog.i18nKey || Object.keys(validPlaceholders).length > 0) {
+          taskLogConfig = {
+            i18nKey: customEdge.taskLog.i18nKey,
+            placeholders: validPlaceholders
+          }
+        }
+      }
+      
+      let globalParamsConfig: Array<{ type: 'add' | 'remove'; key: string; value?: string }> | undefined
+      if (customEdge.globalParams) {
+        const validGlobalParams: Array<{ type: 'add' | 'remove'; key: string; value?: string }> = []
+        customEdge.globalParams.forEach(param => {
+          if (param.key && param.key.trim() && !param.key.startsWith('__temp_')) {
+            validGlobalParams.push({
+              type: param.type,
+              key: param.key.trim(),
+              value: param.value !== undefined ? param.value : ''
+            })
+          }
+        })
+        if (validGlobalParams.length > 0) {
+          globalParamsConfig = validGlobalParams
+        }
+      }
+      
+      const conditions: EdgeConditionConfig | undefined = customEdge.statusCode || customEdge.paramName || taskLogConfig || globalParamsConfig ? {
         statusCode: customEdge.statusCode || undefined,
         paramName: customEdge.paramName || undefined,
         paramOperator: customEdge.paramOperator as ConditionOperator,
-        paramValue: customEdge.paramValue || undefined
+        paramValue: customEdge.paramValue || undefined,
+        taskLog: taskLogConfig,
+        globalParams: globalParamsConfig
       } : undefined
       
       const branches: ConditionBranch[] | undefined = customEdge.branches?.map(branch => ({
@@ -2357,6 +2936,13 @@ const exportWorkflowToXML = () => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.param-section-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 0.5rem;
 }
 
 .placeholder-row {
